@@ -1,4 +1,4 @@
-import { Margins } from './layout/layoutEngine';
+import { Margins, SpacingMode } from './layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG } from './pdf/cutMarks';
 import { CropData, CroppedResult, SizingMode } from './image/cropEngine';
 import { LoadedImage } from './image/imageLoader';
@@ -24,6 +24,7 @@ export interface AppSettings {
   gapX: number;
   gapY: number;
   linkGaps: boolean;
+  spacingMode: SpacingMode;
   allowRotation: boolean;
   requestedCopies: number | 'AUTO';
   cutMarks: CutMarksConfig;
@@ -58,6 +59,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gapX: 3,
   gapY: 3,
   linkGaps: true,
+  spacingMode: 'center',
   allowRotation: true,
   requestedCopies: 'AUTO',
   cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG },
@@ -113,6 +115,7 @@ export function saveSettings(settings: AppSettings): void {
       gapX: settings.gapX,
       gapY: settings.gapY,
       linkGaps: settings.linkGaps,
+      spacingMode: settings.spacingMode,
       allowRotation: settings.allowRotation,
       requestedCopies: settings.requestedCopies,
       cutMarks: settings.cutMarks,

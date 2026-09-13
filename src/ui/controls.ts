@@ -1,10 +1,12 @@
 import { store, AppState, PageOrientation } from '../state';
-import { calculateLayout, LayoutResult } from '../layout/layoutEngine';
+import { calculateLayout, LayoutResult, SpacingMode } from '../layout/layoutEngine';
 import { loadSourceImage, extractImageFromClipboard, isSupportedImageType } from '../image/imageLoader';
 import { renderCroppedArtwork, CropData } from '../image/cropEngine';
 import { getDpiInfo } from '../image/dpiCalculator';
 import { cropDialog } from './cropDialog';
 import { generateStickerSheetPdf, downloadPdfBlob, openPdfForPrint } from '../pdf/pdfGenerator';
+import { generateStickerSheetPng, downloadPngBlob } from '../export/pngGenerator';
+import { ZoomController } from '../preview/zoomController';
 import { createCalibrationPdf } from '../pdf/calibrationPage';
 import { renderPreviewSvg } from '../preview/previewRenderer';
 import { roundMm } from '../units/mm';
@@ -16,6 +18,7 @@ import { trackEvent } from '../analytics';
 export class UIController {
   private currentLayout: LayoutResult | null = null;
   private isProcessingImage: boolean = false;
+  private zoomController: ZoomController | null = null;
   private activeCatalogCategory: string = 'all';
   private catalogSearchQuery: string = '';
   private lastThermalFormatId: string = 'peripage_57';
@@ -559,6 +562,18 @@ export class UIController {
       if (requestedCopiesInput) requestedCopiesInput.value = 'AUTO';
     });
 
+    // Режим распределения отступов (сетка)
+    const spacingRadios = document.querySelectorAll('input[name="spacingMode"]');
+    spacingRadios.forEach((radio) => {
+      radio.addEventListener('change', async (e) => {
+        const target = e.target as HTMLInputElement;
+        if (target.checked) {
+          store.update({ spacingMode: target.value as SpacingMode });
+          await this.recalculateArtwork();
+        }
+      });
+    });
+
     // 7. Метки реза и Bleed
     const cutMarksToggle = document.getElementById('cutMarksEnabled') as HTMLInputElement;
     const bleedSelect = document.getElementById('bleedSelect') as HTMLSelectElement;
@@ -574,9 +589,11 @@ export class UIController {
       store.update({ bleedMm: parseInt(bleedSelect.value, 10) || 0 });
     });
 
-    // 8. Кнопки экспорта
+    // 8. Кнопки экспорта (PDF и PNG 300 DPI)
     document.getElementById('btnDownloadPdf')?.addEventListener('click', () => this.handleDownloadPdf());
     document.getElementById('btnHeaderDownloadPdf')?.addEventListener('click', () => this.handleDownloadPdf());
+    document.getElementById('btnDownloadPng')?.addEventListener('click', () => this.handleDownloadPng());
+    document.getElementById('btnHeaderDownloadPng')?.addEventListener('click', () => this.handleDownloadPng());
     document.getElementById('btnPrintPdf')?.addEventListener('click', () => this.handlePrintPdf());
     document.getElementById('btnCalibrationPdf')?.addEventListener('click', () => this.handleCalibrationPdf());
     document.getElementById('btnResetSettings')?.addEventListener('click', () => {
@@ -585,12 +602,27 @@ export class UIController {
       }
     });
 
+    // 8.1 Интерактивный Zoom & Pan предпросмотра листа
+    const viewport = document.querySelector('.sheet-viewport-wrapper') as HTMLElement;
+    const sheetContainer = document.getElementById('sheetPreviewContainer') as HTMLElement;
+    if (viewport && sheetContainer) {
+      this.zoomController = new ZoomController(viewport, sheetContainer);
+      const badge = document.getElementById('zoomLevelBadge');
+      this.zoomController.setBadgeElement(badge);
+
+      document.getElementById('btnZoomIn')?.addEventListener('click', () => this.zoomController?.zoomIn(0.25));
+      document.getElementById('btnZoomOut')?.addEventListener('click', () => this.zoomController?.zoomOut(0.25));
+      document.getElementById('btnZoomReset')?.addEventListener('click', () => this.zoomController?.resetZoom(true));
+      document.getElementById('btnZoomFit')?.addEventListener('click', () => this.zoomController?.resetZoom(true));
+    }
+
     // 9. Мобильные табы (Параметры / Превью / Справка)
     const tabBtnControls = document.getElementById('tabBtnControls');
     const tabBtnPreview = document.getElementById('tabBtnPreview');
     const tabBtnGuide = document.getElementById('tabBtnGuide');
     const btnGuideLink = document.getElementById('btnGuideLink');
     const btnMobileDownloadPdf = document.getElementById('btnMobileDownloadPdf');
+    const btnMobileDownloadPng = document.getElementById('btnMobileDownloadPng');
 
     // По умолчанию на мобильных активны параметры
     document.body.classList.add('tab-active-controls');
@@ -697,6 +729,7 @@ export class UIController {
     });
 
     btnMobileDownloadPdf?.addEventListener('click', () => this.handleDownloadPdf());
+    btnMobileDownloadPng?.addEventListener('click', () => this.handleDownloadPng());
   }
 
   /**
@@ -758,6 +791,7 @@ export class UIController {
         gapY: state.gapY,
         allowRotation: state.allowRotation,
         requestedCopies: state.requestedCopies,
+        spacingMode: state.spacingMode,
       });
 
       const sheetRotation = layout.selectedRotation;
@@ -852,6 +886,51 @@ export class UIController {
   }
 
   /**
+   * Экспорт листа в формате PNG высокого качества (300 DPI)
+   */
+  private async handleDownloadPng() {
+    if (!this.currentLayout || this.currentLayout.positions.length === 0) {
+      alert(t('alertNoStickers'));
+      return;
+    }
+
+    const state = store.getState();
+    const pageDim = store.getPageDimensions();
+
+    try {
+      const pngBlob = await generateStickerSheetPng({
+        pageWidthMm: pageDim.widthMm,
+        pageHeightMm: pageDim.heightMm,
+        layout: this.currentLayout,
+        imageDataUrl: state.croppedResult?.dataUrl || null,
+        cutMarks: state.cutMarks,
+        bleedMm: state.bleedMm,
+        dpi: 300,
+      });
+
+      const formatName = state.paperFormatId.toLowerCase();
+      const filename = `stickers-${formatName}-${state.stickerWidthMm}x${state.stickerHeightMm}mm-${this.currentLayout.actualCopies}pcs.png`;
+      downloadPngBlob(pngBlob, filename);
+
+      trackEvent({
+        name: 'pdf_downloaded',
+        data: {
+          widthMm: state.stickerWidthMm,
+          heightMm: state.stickerHeightMm,
+          copies: this.currentLayout.actualCopies,
+          bleedMm: state.bleedMm,
+          orientation: state.pageOrientation,
+          paperFormat: state.paperFormatId,
+          unit: state.unit,
+        },
+      });
+    } catch (e) {
+      console.error('Ошибка экспорта PNG:', e);
+      alert('Ошибка при генерации PNG: ' + String(e));
+    }
+  }
+
+  /**
    * Печать PDF с выводом предупреждения о масштабе 100%
    */
   private async handlePrintPdf() {
@@ -914,6 +993,7 @@ export class UIController {
       gapY: state.gapY,
       allowRotation: state.allowRotation,
       requestedCopies: state.requestedCopies,
+      spacingMode: state.spacingMode,
     });
 
     // 2. Синхронизация полей ввода
@@ -1087,6 +1167,9 @@ export class UIController {
     setVal('requestedCopies', state.requestedCopies === 'AUTO' ? 'AUTO' : state.requestedCopies);
 
     setChecked('cutMarksEnabled', state.cutMarks.enabled);
+    setChecked('spacingCenter', (state.spacingMode || 'center') === 'center');
+    setChecked('spacingStart', state.spacingMode === 'start');
+    setChecked('spacingJustify', state.spacingMode === 'justify');
 
     const bleedSelect = document.getElementById('bleedSelect') as HTMLSelectElement;
     if (bleedSelect) bleedSelect.value = state.bleedMm.toString();

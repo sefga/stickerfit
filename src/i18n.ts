@@ -151,6 +151,11 @@ export const translations = {
     secLayoutTitle: '4. Раскладка и сетка',
     lblAllowRotation: 'Автоповорот 90° для экономии листа',
     tipAutoRotate: 'Поворачивает стикеры, если с разворотом на лист помещается больше копий.',
+    lblSpacingMode: 'Распределение отступов',
+    optSpacingCenter: 'По центру',
+    optSpacingStart: 'Точные поля',
+    optSpacingJustify: 'Равномерно',
+    tipSpacing: '«Точные поля» фиксируют заданные отступы от края листа; «Равномерно» выравнивает все зазоры.',
     lblCopies: 'Количество копий',
     placeholderCopies: 'AUTO или число',
     btnMaxCopies: 'Максимум',
@@ -191,10 +196,17 @@ export const translations = {
     secExportTitle: '6. Экспорт и печать',
     btnDownloadPdf: 'Скачать PDF для печати',
     btnDownloadPdfShort: 'Скачать PDF',
+    btnDownloadPng: 'Скачать PNG (300 DPI)',
+    btnDownloadPngShort: 'Скачать PNG',
     btnPrintPdf: 'Печать',
     printNotice: '<strong>Масштаб печати:</strong> Установите масштаб <strong>100%</strong> (Реальный размер), чтобы не исказить размеры стикеров.',
     btnCalibrationPdf: 'Калибровочный тест принтера (1:1)',
     btnResetSettings: 'Сбросить настройки',
+
+    // Зум и просмотр
+    zoomIn: 'Приблизить',
+    zoomOut: 'Отдалить',
+    zoomReset: 'По размеру',
 
     // Превью зона
     previewLoading: 'Загрузка листа A4...',
@@ -430,6 +442,11 @@ export const translations = {
     secLayoutTitle: '4. Layout & Grid',
     lblAllowRotation: 'Auto-rotate 90° for optimal sheet economy',
     tipAutoRotate: 'Rotates stickers if 90° orientation yields more copies.',
+    lblSpacingMode: 'Spacing distribution',
+    optSpacingCenter: 'Centered',
+    optSpacingStart: 'Strict margins',
+    optSpacingJustify: 'Justified',
+    tipSpacing: '«Strict margins» keeps sheet margins exact; «Justified» spreads remaining paper space evenly.',
     lblCopies: 'Number of copies',
     placeholderCopies: 'AUTO or number',
     btnMaxCopies: 'Maximum',
@@ -470,10 +487,17 @@ export const translations = {
     secExportTitle: '6. Export & Print',
     btnDownloadPdf: 'Download Print-Ready PDF',
     btnDownloadPdfShort: 'Download PDF',
+    btnDownloadPng: 'Download PNG (300 DPI)',
+    btnDownloadPngShort: 'Download PNG',
     btnPrintPdf: 'Print',
     printNotice: '<strong>Print Scale:</strong> Always set scale to <strong>100%</strong> (Actual size) in your printer dialog.',
     btnCalibrationPdf: 'Printer Calibration Test (1:1)',
     btnResetSettings: 'Reset Settings',
+
+    // Zoom & view
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    zoomReset: 'Fit to screen',
 
     // Preview area
     previewLoading: 'Loading A4 sheet...',

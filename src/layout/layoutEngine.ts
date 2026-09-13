@@ -7,6 +7,8 @@ export interface Margins {
   right: number;
 }
 
+export type SpacingMode = 'center' | 'start' | 'justify';
+
 export interface LayoutInput {
   pageWidthMm: number;
   pageHeightMm: number;
@@ -17,6 +19,7 @@ export interface LayoutInput {
   gapY: number;
   allowRotation: boolean;
   requestedCopies?: number | 'AUTO';
+  spacingMode?: SpacingMode;
 }
 
 export interface StickerPosition {
@@ -41,6 +44,8 @@ export interface OrientationCalculation {
   gridHeightMm: number;
   offsetX: number;
   offsetY: number;
+  effectiveGapX: number;
+  effectiveGapY: number;
 }
 
 export interface LayoutResult {
@@ -72,7 +77,8 @@ function calculateForOrientation(
   gapY: number,
   marginLeft: number,
   marginTop: number,
-  rotation: 0 | 90
+  rotation: 0 | 90,
+  spacingMode: SpacingMode = 'center'
 ): OrientationCalculation {
   // Защита от некорректных размеров
   if (usableWidth <= 0 || usableHeight <= 0 || stickerW <= 0 || stickerH <= 0) {
@@ -87,6 +93,8 @@ function calculateForOrientation(
       gridHeightMm: 0,
       offsetX: marginLeft,
       offsetY: marginTop,
+      effectiveGapX: gapX,
+      effectiveGapY: gapY,
     };
   }
 
@@ -99,12 +107,44 @@ function calculateForOrientation(
   const gridWidthMm = cols > 0 ? roundMm(cols * stickerW + (cols - 1) * gapX, 3) : 0;
   const gridHeightMm = rows > 0 ? roundMm(rows * stickerH + (rows - 1) * gapY, 3) : 0;
 
-  // Центрирование сетки внутри доступной области листа (usable area)
-  const remainingX = usableWidth - gridWidthMm;
-  const remainingY = usableHeight - gridHeightMm;
+  const remainingX = Math.max(0, usableWidth - gridWidthMm);
+  const remainingY = Math.max(0, usableHeight - gridHeightMm);
 
-  const offsetX = roundMm(marginLeft + (remainingX > 0 ? remainingX / 2 : 0), 3);
-  const offsetY = roundMm(marginTop + (remainingY > 0 ? remainingY / 2 : 0), 3);
+  let offsetX = marginLeft;
+  let offsetY = marginTop;
+  let effectiveGapX = gapX;
+  let effectiveGapY = gapY;
+
+  if (spacingMode === 'start') {
+    // Точные поля листа: первый стикер начинается строго от полей, остаток не складывается с полями
+    offsetX = marginLeft;
+    offsetY = marginTop;
+    effectiveGapX = gapX;
+    effectiveGapY = gapY;
+  } else if (spacingMode === 'justify') {
+    // Равномерное распределение: остаток поровну распределяется между зазорами
+    if (cols > 1 && remainingX > 0) {
+      effectiveGapX = roundMm(gapX + remainingX / (cols - 1), 3);
+      offsetX = marginLeft;
+    } else {
+      offsetX = roundMm(marginLeft + (remainingX > 0 ? remainingX / 2 : 0), 3);
+      effectiveGapX = gapX;
+    }
+
+    if (rows > 1 && remainingY > 0) {
+      effectiveGapY = roundMm(gapY + remainingY / (rows - 1), 3);
+      offsetY = marginTop;
+    } else {
+      offsetY = roundMm(marginTop + (remainingY > 0 ? remainingY / 2 : 0), 3);
+      effectiveGapY = gapY;
+    }
+  } else {
+    // По умолчанию ('center'): центрирование сетки внутри доступной области листа
+    offsetX = roundMm(marginLeft + (remainingX > 0 ? remainingX / 2 : 0), 3);
+    offsetY = roundMm(marginTop + (remainingY > 0 ? remainingY / 2 : 0), 3);
+    effectiveGapX = gapX;
+    effectiveGapY = gapY;
+  }
 
   return {
     rotation,
@@ -117,6 +157,8 @@ function calculateForOrientation(
     gridHeightMm,
     offsetX,
     offsetY,
+    effectiveGapX,
+    effectiveGapY,
   };
 }
 
@@ -135,6 +177,7 @@ export function calculateLayout(input: LayoutInput): LayoutResult {
     gapY,
     allowRotation,
     requestedCopies = 'AUTO',
+    spacingMode = 'center',
   } = input;
 
   const usableWidth = roundMm(pageWidthMm - margins.left - margins.right, 3);
@@ -188,7 +231,8 @@ export function calculateLayout(input: LayoutInput): LayoutResult {
     gapY,
     margins.left,
     margins.top,
-    0
+    0,
+    spacingMode
   );
 
   // Вариант B: повернутая ориентация на 90° (rotation = 90, H x W)
@@ -201,7 +245,8 @@ export function calculateLayout(input: LayoutInput): LayoutResult {
     gapY,
     margins.left,
     margins.top,
-    90
+    90,
+    spacingMode
   );
 
   let selectedOption: OrientationCalculation;
@@ -254,8 +299,8 @@ export function calculateLayout(input: LayoutInput): LayoutResult {
 
   for (let r = 0; r < selectedOption.rows && stickerCount < actualCopies; r++) {
     for (let c = 0; c < selectedOption.columns && stickerCount < actualCopies; c++) {
-      const xMm = roundMm(selectedOption.offsetX + c * (selectedOption.stickerWidthMm + gapX), 3);
-      const yMm = roundMm(selectedOption.offsetY + r * (selectedOption.stickerHeightMm + gapY), 3);
+      const xMm = roundMm(selectedOption.offsetX + c * (selectedOption.stickerWidthMm + selectedOption.effectiveGapX), 3);
+      const yMm = roundMm(selectedOption.offsetY + r * (selectedOption.stickerHeightMm + selectedOption.effectiveGapY), 3);
 
       positions.push({
         index: stickerCount,

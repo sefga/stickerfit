@@ -1,0 +1,85 @@
+import { describe, it, expect, vi } from 'vitest';
+import { generateStickerSheetPng } from './pngGenerator';
+import { calculateLayout } from '../layout/layoutEngine';
+import { A4_WIDTH_MM, A4_HEIGHT_MM } from '../units/mm';
+
+describe('PNG Export Generator (300 DPI Lossless)', () => {
+  it('Рассчитывает типографские размеры холста 300 DPI (2480 × 3508 px для A4) и корректно отрисовывает стикеры', async () => {
+    const layout = calculateLayout({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 10, bottom: 10, left: 10, right: 10 },
+      gapX: 2,
+      gapY: 2,
+      allowRotation: false,
+    });
+
+    const mockCtx = {
+      fillStyle: '',
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      drawImage: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText: vi.fn(),
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: '',
+      font: '',
+      textAlign: '',
+      textBaseline: '',
+      lineWidth: 1,
+      strokeStyle: '',
+    };
+
+    const mockCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(mockCtx),
+      toBlob: vi.fn((cb: (blob: Blob) => void) => {
+        const dummyBlob = new Blob(['png-bytes'], { type: 'image/png' });
+        cb(dummyBlob);
+      }),
+    };
+
+    // Мокаем document.createElement('canvas')
+    const originalDocument = globalThis.document;
+    globalThis.document = {
+      createElement: vi.fn().mockImplementation((tag: string) => {
+        if (tag === 'canvas') return mockCanvas;
+        return originalDocument?.createElement?.(tag);
+      }),
+    } as any;
+
+    try {
+      const blob = await generateStickerSheetPng({
+        pageWidthMm: A4_WIDTH_MM,
+        pageHeightMm: A4_HEIGHT_MM,
+        layout,
+        cutMarks: { enabled: true, lengthMm: 3, offsetMm: 1, lineWidthPt: 0.2 },
+        dpi: 300,
+      });
+
+      expect(blob).toBeDefined();
+      expect(blob.type).toBe('image/png');
+
+      // Проверяем типографские размеры A4 при 300 DPI
+      expect(mockCanvas.width).toBe(2480);
+      expect(mockCanvas.height).toBe(3508);
+
+      // Фон листа залит белым цветом
+      expect(mockCtx.fillRect).toHaveBeenCalledWith(0, 0, 2480, 3508);
+
+      // Отрисованы плейсхолдеры для всех позиций стикеров
+      expect(mockCtx.strokeRect).toHaveBeenCalledTimes(layout.positions.length);
+
+      // Метки реза отрисованы через stroke
+      expect(mockCtx.stroke).toHaveBeenCalled();
+    } finally {
+      globalThis.document = originalDocument;
+    }
+  });
+});

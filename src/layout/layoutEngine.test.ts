@@ -194,4 +194,90 @@ describe('Layout Engine — Математические тесты геомет
     expect(result.actualCopies).toBe(7);
     expect(result.positions).toHaveLength(7);
   });
+
+  // Тесты режимов распределения отступов (spacingMode)
+  describe('Тестирование режимов распределения отступов (spacingMode)', () => {
+    it('Режим "start" (Точные поля): строго фиксирует левый и верхний отступ от края листа', () => {
+      const margins = { top: 10, bottom: 10, left: 15, right: 10 };
+      const gapX = 4;
+      const gapY = 4;
+      const result = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins,
+        gapX,
+        gapY,
+        allowRotation: false,
+        spacingMode: 'start',
+      });
+
+      // Первый стикер должен начинаться строго с margins.left и margins.top
+      expect(result.positions[0].xMm).toBeCloseTo(margins.left, 4);
+      expect(result.positions[0].yMm).toBeCloseTo(margins.top, 4);
+
+      // Проверяем, что зазор между соседними колонками равен ровно gapX
+      if (result.columns > 1) {
+        const deltaX = result.positions[1].xMm - (result.positions[0].xMm + result.positions[0].widthMm);
+        expect(deltaX).toBeCloseTo(gapX, 4);
+      }
+
+      // Проверяем, что зазор между соседними строками равен ровно gapY
+      if (result.rows > 1) {
+        const secondRowFirstCol = result.positions[result.columns];
+        const deltaY = secondRowFirstCol.yMm - (result.positions[0].yMm + result.positions[0].heightMm);
+        expect(deltaY).toBeCloseTo(gapY, 4);
+      }
+    });
+
+    it('Режим "justify" (Равномерно): равномерно распределяет остаточное пространство между зазорами', () => {
+      const margins = { top: 5, bottom: 5, left: 5, right: 5 };
+      const gapX = 2;
+      const gapY = 2;
+      const resultJustify = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins,
+        gapX,
+        gapY,
+        allowRotation: false,
+        spacingMode: 'justify',
+      });
+
+      // В режиме justify эффективный зазор должен быть больше или равен базовому gapX/gapY
+      if (resultJustify.columns > 1) {
+        const deltaX = resultJustify.positions[1].xMm - (resultJustify.positions[0].xMm + resultJustify.positions[0].widthMm);
+        expect(deltaX).toBeGreaterThanOrEqual(gapX);
+      }
+      // Все элементы не выходят за границы листа
+      for (const pos of resultJustify.positions) {
+        expect(pos.xMm).toBeGreaterThanOrEqual(margins.left - 0.001);
+        expect(pos.yMm).toBeGreaterThanOrEqual(margins.top - 0.001);
+        expect(pos.xMm + pos.widthMm).toBeLessThanOrEqual(210 - margins.right + 0.001);
+        expect(pos.yMm + pos.heightMm).toBeLessThanOrEqual(297 - margins.bottom + 0.001);
+      }
+    });
+
+    it('Режим "center" (дефолт): центрирует всю сетку стикеров внутри полезной области', () => {
+      const margins = { top: 5, bottom: 5, left: 5, right: 5 };
+      const resultCenter = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins,
+        gapX: 2,
+        gapY: 2,
+        allowRotation: false,
+        spacingMode: 'center',
+      });
+
+      // В center режиме при наличии неполного заполнения offsetX > margins.left
+      expect(resultCenter.positions[0].xMm).toBeGreaterThanOrEqual(margins.left);
+      expect(resultCenter.positions[0].yMm).toBeGreaterThanOrEqual(margins.top);
+    });
+  });
 });

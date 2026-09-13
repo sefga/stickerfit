@@ -67,7 +67,57 @@ export function generateCutMarks(
     lines.push({ x1Mm: x2, y1Mm: y2 + offsetMm, x2Mm: x2, y2Mm: y2 + offsetMm + lengthMm });
   }
 
-  return lines;
+  return mergeColinearMarks(lines);
+}
+
+/**
+ * Объединение перекрывающихся или соприкасающихся отрезков меток реза в зазорах
+ */
+function mergeColinearMarks(lines: CutMarkLine[]): CutMarkLine[] {
+  const result: CutMarkLine[] = [];
+  const EPSILON = 0.01;
+
+  // Разделяем на горизонтальные и вертикальные
+  const horiz: CutMarkLine[] = [];
+  const vert: CutMarkLine[] = [];
+
+  for (const line of lines) {
+    if (Math.abs(line.y1Mm - line.y2Mm) < EPSILON) {
+      const minX = Math.min(line.x1Mm, line.x2Mm);
+      const maxX = Math.max(line.x1Mm, line.x2Mm);
+      horiz.push({ x1Mm: minX, y1Mm: line.y1Mm, x2Mm: maxX, y2Mm: line.y1Mm });
+    } else if (Math.abs(line.x1Mm - line.x2Mm) < EPSILON) {
+      const minY = Math.min(line.y1Mm, line.y2Mm);
+      const maxY = Math.max(line.y1Mm, line.y2Mm);
+      vert.push({ x1Mm: line.x1Mm, y1Mm: minY, x2Mm: line.x1Mm, y2Mm: maxY });
+    } else {
+      result.push(line);
+    }
+  }
+
+  // Сортировка и слияние горизонтальных
+  horiz.sort((a, b) => Math.abs(a.y1Mm - b.y1Mm) > EPSILON ? a.y1Mm - b.y1Mm : a.x1Mm - b.x1Mm);
+  for (const h of horiz) {
+    const last = result.length > 0 ? result[result.length - 1] : null;
+    if (last && Math.abs(last.y1Mm - last.y2Mm) < EPSILON && Math.abs(last.y1Mm - h.y1Mm) < EPSILON && h.x1Mm <= last.x2Mm + EPSILON) {
+      last.x2Mm = Math.max(last.x2Mm, h.x2Mm);
+    } else {
+      result.push({ ...h });
+    }
+  }
+
+  // Сортировка и слияние вертикальных
+  vert.sort((a, b) => Math.abs(a.x1Mm - b.x1Mm) > EPSILON ? a.x1Mm - b.x1Mm : a.y1Mm - b.y1Mm);
+  for (const v of vert) {
+    const last = result.length > 0 ? result[result.length - 1] : null;
+    if (last && Math.abs(last.x1Mm - last.x2Mm) < EPSILON && Math.abs(last.x1Mm - v.x1Mm) < EPSILON && v.y1Mm <= last.y2Mm + EPSILON) {
+      last.y2Mm = Math.max(last.y2Mm, v.y2Mm);
+    } else {
+      result.push({ ...v });
+    }
+  }
+
+  return result;
 }
 
 /**

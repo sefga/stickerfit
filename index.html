@@ -400,6 +400,22 @@
             Поворачивает стикеры, если с разворотом на лист помещается больше копий.
           </div>
 
+          <!-- Выравнивание отступов и сетки -->
+          <div class="form-col" style="margin-bottom: 12px;">
+            <label data-i18n="lblSpacingMode">Распределение отступов</label>
+            <div class="segmented-control">
+              <input type="radio" id="spacingCenter" name="spacingMode" value="center" checked />
+              <label for="spacingCenter" data-i18n="optSpacingCenter">По центру</label>
+              <input type="radio" id="spacingStart" name="spacingMode" value="start" />
+              <label for="spacingStart" data-i18n="optSpacingStart">Точные поля</label>
+              <input type="radio" id="spacingJustify" name="spacingMode" value="justify" />
+              <label for="spacingJustify" data-i18n="optSpacingJustify">Равномерно</label>
+            </div>
+            <div class="field-hint" id="spacingModeHint" data-i18n="tipSpacing" style="margin-top: 4px;">
+              «Точные поля» фиксируют заданные отступы от края листа; «Равномерно» выравнивает все зазоры.
+            </div>
+          </div>
+
           <div class="form-row">
             <div class="form-col" style="flex: 2;">
               <label for="requestedCopies" data-i18n="lblCopies">Количество копий</label>
@@ -450,6 +466,11 @@
             <span data-i18n="btnDownloadPdf">Скачать PDF для печати</span>
           </button>
 
+          <button type="button" class="btn btn-secondary btn-block" id="btnDownloadPng" style="margin-top: 6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            <span data-i18n="btnDownloadPng">Скачать PNG (300 DPI)</span>
+          </button>
+
           <button type="button" class="btn btn-secondary btn-block" id="btnPrintPdf">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             <span data-i18n="btnPrintPdf">Печать</span>
@@ -489,12 +510,36 @@
             </svg>
             <span data-i18n="btnDownloadPdfShort">Скачать PDF</span>
           </button>
+          <button type="button" class="btn-header-export btn-header-export-png" id="btnHeaderDownloadPng" data-i18n-title="btnDownloadPng" title="Скачать PNG (300 DPI)" aria-label="Скачать PNG (300 DPI)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <span data-i18n="btnDownloadPngShort">Скачать PNG</span>
+          </button>
         </div>
       </div>
 
       <div class="sheet-viewport-wrapper">
         <div class="sheet-shadow-wrapper" id="sheetPreviewContainer">
           <!-- SVG динамически рендерится через previewRenderer.ts -->
+        </div>
+
+        <!-- Плавающий тулбар масштабирования (Zoom & Pan) -->
+        <div class="zoom-toolbar" id="previewZoomToolbar" role="toolbar" aria-label="Масштаб предпросмотра">
+          <button type="button" class="zoom-btn" id="btnZoomOut" data-i18n-title="zoomOut" title="Отдалить (-)" aria-label="Отдалить">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+          <button type="button" class="zoom-badge-btn" id="btnZoomReset" data-i18n-title="zoomReset" title="Сбросить масштаб (100%)" aria-label="Текущий масштаб. Нажмите для сброса">
+            <span id="zoomLevelBadge">100%</span>
+          </button>
+          <button type="button" class="zoom-btn" id="btnZoomIn" data-i18n-title="zoomIn" title="Приблизить (+)" aria-label="Приблизить">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+          <button type="button" class="zoom-btn zoom-btn-fit" id="btnZoomFit" data-i18n-title="zoomReset" title="По размеру экрана" aria-label="По размеру экрана">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+          </button>
         </div>
       </div>
     </main>
@@ -676,6 +721,14 @@
           <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
         <span data-i18n="mobileDownload">Скачать PDF</span>
+      </button>
+      <button type="button" class="btn btn-secondary btn-mobile-cta" id="btnMobileDownloadPng" style="padding: 10px 14px; font-weight: 600; gap: 4px;" title="Скачать PNG 300 DPI">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+        <span>PNG</span>
       </button>
     </div>
   </div>
