@@ -466,9 +466,28 @@
             <span data-i18n="btnDownloadPdf">Скачать PDF для печати</span>
           </button>
 
-          <button type="button" class="btn btn-secondary btn-block" id="btnDownloadPng" style="margin-top: 6px;">
+          <!-- Выбор качества PNG (DPI) -->
+          <div class="form-col" style="margin-top: 10px; margin-bottom: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);" data-i18n="lblPngDpi">Качество PNG</label>
+              <span id="pngDimensionsBadge" style="font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;">2480 × 3508 px</span>
+            </div>
+            <div class="segmented-control">
+              <input type="radio" id="pngDpi150" name="pngDpi" value="150" />
+              <label for="pngDpi150" data-i18n="optPngDpi150">150 DPI (Быстро)</label>
+              <input type="radio" id="pngDpi300" name="pngDpi" value="300" checked />
+              <label for="pngDpi300" data-i18n="optPngDpi300">300 DPI ★</label>
+              <input type="radio" id="pngDpi600" name="pngDpi" value="600" />
+              <label for="pngDpi600" data-i18n="optPngDpi600">600 DPI (Ultra)</label>
+            </div>
+            <div class="field-hint" id="pngDpiHint" data-i18n="tipPngDpi" style="margin-top: 4px;">
+              150 DPI — быстрый файл для веб; 300 DPI — стандарт типографии; 600 DPI — сверхчётко для мелких стикеров.
+            </div>
+          </div>
+
+          <button type="button" class="btn btn-secondary btn-block" id="btnDownloadPng" style="margin-top: 2px;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-            <span data-i18n="btnDownloadPng">Скачать PNG (300 DPI)</span>
+            <span id="btnDownloadPngText" data-i18n="btnDownloadPng">Скачать PNG (300 DPI)</span>
           </button>
 
           <button type="button" class="btn btn-secondary btn-block" id="btnPrintPdf">

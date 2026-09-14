@@ -8,8 +8,6 @@ export interface PngExportOptions {
   layout: LayoutResult;
   imageElement?: HTMLImageElement | null;
   imageDataUrl?: string | null;
-  imageBytes?: Uint8Array;
-  imageMimeType?: string;
   cutMarks?: CutMarksConfig;
   bleedMm?: number;
   dpi?: number;

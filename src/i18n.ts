@@ -194,9 +194,14 @@ export const translations = {
 
     // Секция 6: Экспорт и печать
     secExportTitle: '6. Экспорт и печать',
+    lblPngDpi: 'Качество PNG',
+    optPngDpi150: '150 DPI (Быстро)',
+    optPngDpi300: '300 DPI ★',
+    optPngDpi600: '600 DPI (Ultra)',
+    tipPngDpi: '150 DPI — быстрый файл для веб; 300 DPI — стандарт типографии; 600 DPI — сверхчётко для мелких стикеров.',
     btnDownloadPdf: 'Скачать PDF для печати',
     btnDownloadPdfShort: 'Скачать PDF',
-    btnDownloadPng: 'Скачать PNG (300 DPI)',
+    btnDownloadPng: 'Скачать PNG ({dpi} DPI)',
     btnDownloadPngShort: 'Скачать PNG',
     btnPrintPdf: 'Печать',
     printNotice: '<strong>Масштаб печати:</strong> Установите масштаб <strong>100%</strong> (Реальный размер), чтобы не исказить размеры стикеров.',
@@ -485,9 +490,14 @@ export const translations = {
 
     // Section 6: Export & Print
     secExportTitle: '6. Export & Print',
+    lblPngDpi: 'PNG Quality',
+    optPngDpi150: '150 DPI (Fast)',
+    optPngDpi300: '300 DPI ★',
+    optPngDpi600: '600 DPI (Ultra)',
+    tipPngDpi: '150 DPI for drafts/web; 300 DPI is print standard; 600 DPI is ultra-sharp for tiny labels.',
     btnDownloadPdf: 'Download Print-Ready PDF',
     btnDownloadPdfShort: 'Download PDF',
-    btnDownloadPng: 'Download PNG (300 DPI)',
+    btnDownloadPng: 'Download PNG ({dpi} DPI)',
     btnDownloadPngShort: 'Download PNG',
     btnPrintPdf: 'Print',
     printNotice: '<strong>Print Scale:</strong> Always set scale to <strong>100%</strong> (Actual size) in your printer dialog.',

@@ -8,6 +8,8 @@ import { calculatePageDimensions, DEFAULT_PAPER_FORMAT_ID } from './units/paperF
 
 export type PageOrientation = 'portrait' | 'landscape';
 
+export type PngDpi = 150 | 300 | 600;
+
 export interface AppSettings {
   unit: Unit;
   paperFormatId: string;
@@ -29,6 +31,7 @@ export interface AppSettings {
   requestedCopies: number | 'AUTO';
   cutMarks: CutMarksConfig;
   bleedMm: number;
+  pngDpi: PngDpi;
 }
 
 export interface AppState extends AppSettings {
@@ -64,6 +67,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   requestedCopies: 'AUTO',
   cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG },
   bleedMm: 0,
+  pngDpi: 300,
 };
 
 function loadSettings(): AppSettings {
@@ -120,6 +124,7 @@ export function saveSettings(settings: AppSettings): void {
       requestedCopies: settings.requestedCopies,
       cutMarks: settings.cutMarks,
       bleedMm: settings.bleedMm,
+      pngDpi: settings.pngDpi || 300,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) {

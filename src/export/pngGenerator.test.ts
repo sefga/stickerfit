@@ -82,4 +82,77 @@ describe('PNG Export Generator (300 DPI Lossless)', () => {
       globalThis.document = originalDocument;
     }
   });
+
+  it('Корректно рассчитывает габариты холста для 150 DPI (черновик) и 600 DPI (Ultra HD)', async () => {
+    const layout = calculateLayout({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 10, bottom: 10, left: 10, right: 10 },
+      gapX: 2,
+      gapY: 2,
+      allowRotation: false,
+    });
+
+    const mockCtx = {
+      fillStyle: '',
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      drawImage: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText: vi.fn(),
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: '',
+      font: '',
+      textAlign: '',
+      textBaseline: '',
+      lineWidth: 1,
+      strokeStyle: '',
+    };
+
+    const mockCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(mockCtx),
+      toBlob: vi.fn((cb: (blob: Blob) => void) => {
+        cb(new Blob(['png-bytes'], { type: 'image/png' }));
+      }),
+    };
+
+    const originalDocument = globalThis.document;
+    globalThis.document = {
+      createElement: vi.fn().mockImplementation((tag: string) => {
+        if (tag === 'canvas') return mockCanvas;
+        return originalDocument?.createElement?.(tag);
+      }),
+    } as any;
+
+    try {
+      // 150 DPI
+      await generateStickerSheetPng({
+        pageWidthMm: A4_WIDTH_MM,
+        pageHeightMm: A4_HEIGHT_MM,
+        layout,
+        dpi: 150,
+      });
+      expect(mockCanvas.width).toBe(1240);
+      expect(mockCanvas.height).toBe(1754);
+
+      // 600 DPI
+      await generateStickerSheetPng({
+        pageWidthMm: A4_WIDTH_MM,
+        pageHeightMm: A4_HEIGHT_MM,
+        layout,
+        dpi: 600,
+      });
+      expect(mockCanvas.width).toBe(4961);
+      expect(mockCanvas.height).toBe(7016);
+    } finally {
+      globalThis.document = originalDocument;
+    }
+  });
 });

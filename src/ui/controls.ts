@@ -1,4 +1,4 @@
-import { store, AppState, PageOrientation } from '../state';
+import { store, AppState, PageOrientation, PngDpi } from '../state';
 import { calculateLayout, LayoutResult, SpacingMode } from '../layout/layoutEngine';
 import { loadSourceImage, extractImageFromClipboard, isSupportedImageType } from '../image/imageLoader';
 import { renderCroppedArtwork, CropData } from '../image/cropEngine';
@@ -589,7 +589,19 @@ export class UIController {
       store.update({ bleedMm: parseInt(bleedSelect.value, 10) || 0 });
     });
 
-    // 8. Кнопки экспорта (PDF и PNG 300 DPI)
+    // 8. Кнопки экспорта (PDF и PNG)
+    const pngDpiRadios = document.querySelectorAll('input[name="pngDpi"]');
+    pngDpiRadios.forEach((radio) => {
+      radio.addEventListener('change', (e) => {
+        const target = e.target as HTMLInputElement;
+        if (target.checked) {
+          const dpi = parseInt(target.value, 10) as PngDpi;
+          store.update({ pngDpi: dpi });
+          this.updatePngInfoBadge();
+        }
+      });
+    });
+
     document.getElementById('btnDownloadPdf')?.addEventListener('click', () => this.handleDownloadPdf());
     document.getElementById('btnHeaderDownloadPdf')?.addEventListener('click', () => this.handleDownloadPdf());
     document.getElementById('btnDownloadPng')?.addEventListener('click', () => this.handleDownloadPng());
@@ -886,7 +898,7 @@ export class UIController {
   }
 
   /**
-   * Экспорт листа в формате PNG высокого качества (300 DPI)
+   * Экспорт листа в формате PNG высокого качества (выбранный DPI: 150 / 300 / 600)
    */
   private async handleDownloadPng() {
     if (!this.currentLayout || this.currentLayout.positions.length === 0) {
@@ -896,6 +908,7 @@ export class UIController {
 
     const state = store.getState();
     const pageDim = store.getPageDimensions();
+    const dpi = state.pngDpi || 300;
 
     try {
       const pngBlob = await generateStickerSheetPng({
@@ -905,11 +918,11 @@ export class UIController {
         imageDataUrl: state.croppedResult?.dataUrl || null,
         cutMarks: state.cutMarks,
         bleedMm: state.bleedMm,
-        dpi: 300,
+        dpi,
       });
 
       const formatName = state.paperFormatId.toLowerCase();
-      const filename = `stickers-${formatName}-${state.stickerWidthMm}x${state.stickerHeightMm}mm-${this.currentLayout.actualCopies}pcs.png`;
+      const filename = `stickers-${formatName}-${state.stickerWidthMm}x${state.stickerHeightMm}mm-${this.currentLayout.actualCopies}pcs-${dpi}dpi.png`;
       downloadPngBlob(pngBlob, filename);
 
       trackEvent({
@@ -927,6 +940,28 @@ export class UIController {
     } catch (e) {
       console.error('Ошибка экспорта PNG:', e);
       alert('Ошибка при генерации PNG: ' + String(e));
+    }
+  }
+
+  /**
+   * Обновление бейджа с пиксельными размерами листа и надписи кнопки PNG
+   */
+  private updatePngInfoBadge() {
+    const state = store.getState();
+    const pageDim = store.getPageDimensions();
+    const dpi = state.pngDpi || 300;
+    const dpmm = dpi / 25.4;
+    const wPx = Math.round(pageDim.widthMm * dpmm);
+    const hPx = Math.round(pageDim.heightMm * dpmm);
+
+    const badge = document.getElementById('pngDimensionsBadge');
+    if (badge) {
+      badge.textContent = `${wPx} × ${hPx} px`;
+    }
+
+    const btnText = document.getElementById('btnDownloadPngText');
+    if (btnText) {
+      btnText.textContent = t('btnDownloadPng', { dpi });
     }
   }
 
@@ -1170,6 +1205,12 @@ export class UIController {
     setChecked('spacingCenter', (state.spacingMode || 'center') === 'center');
     setChecked('spacingStart', state.spacingMode === 'start');
     setChecked('spacingJustify', state.spacingMode === 'justify');
+
+    const currentPngDpi = state.pngDpi || 300;
+    setChecked('pngDpi150', currentPngDpi === 150);
+    setChecked('pngDpi300', currentPngDpi === 300);
+    setChecked('pngDpi600', currentPngDpi === 600);
+    this.updatePngInfoBadge();
 
     const bleedSelect = document.getElementById('bleedSelect') as HTMLSelectElement;
     if (bleedSelect) bleedSelect.value = state.bleedMm.toString();
