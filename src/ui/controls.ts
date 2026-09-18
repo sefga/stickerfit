@@ -14,10 +14,19 @@ import { Unit, toMm, fromMm, formatUnitValue, getUnitSymbol } from '../units/uni
 import { PAPER_FORMATS, getPaperFormat, getAppTitleForFormat, isThermalPaperFormat } from '../units/paperFormats';
 import { setLanguage, t, applyTranslations, onLanguageChange, TranslationKey } from '../i18n';
 import { trackEvent } from '../analytics';
+import {
+  fitDimensionsToPhotoRatio,
+  getSimplifiedAspectRatio,
+  calculateHeightFromWidth,
+  calculateWidthFromHeight,
+} from '../image/aspectRatio';
 
 export class UIController {
   private currentLayout: LayoutResult | null = null;
   private isProcessingImage: boolean = false;
+  private hasPendingArtworkRecalculation: boolean = false;
+  private currentBlobUrl: string | null = null;
+  private isPhotoRatioActive: boolean = false;
   private zoomController: ZoomController | null = null;
   private activeCatalogCategory: string = 'all';
   private catalogSearchQuery: string = '';
@@ -259,12 +268,21 @@ export class UIController {
       onCommit: async (valInUnit) => {
         const state = store.getState();
         const newWidth = toMm(valInUnit, state.unit);
-        if (state.lockAspectRatio && state.stickerWidthMm > 0) {
-          const ratio = state.stickerHeightMm / state.stickerWidthMm;
-          const newHeight = roundMm(newWidth * ratio, 1);
+        if (state.lockAspectRatio) {
+          let newHeight: number;
+          if (this.isPhotoRatioActive && state.loadedImage && state.loadedImage.sourceWidthPx > 0 && state.loadedImage.sourceHeightPx > 0) {
+            const ratio = state.loadedImage.sourceWidthPx / state.loadedImage.sourceHeightPx;
+            newHeight = calculateHeightFromWidth(newWidth, ratio);
+          } else if (state.stickerWidthMm > 0) {
+            const ratio = state.stickerHeightMm / state.stickerWidthMm;
+            newHeight = roundMm(newWidth * ratio, 1);
+          } else {
+            newHeight = state.stickerHeightMm;
+          }
           inputHeight.value = formatUnitValue(newHeight, state.unit);
           store.update({ stickerWidthMm: newWidth, stickerHeightMm: newHeight });
         } else {
+          this.isPhotoRatioActive = false;
           store.update({ stickerWidthMm: newWidth });
         }
         this.validateStickerDimensions();
@@ -283,12 +301,21 @@ export class UIController {
       onCommit: async (valInUnit) => {
         const state = store.getState();
         const newHeight = toMm(valInUnit, state.unit);
-        if (state.lockAspectRatio && state.stickerHeightMm > 0) {
-          const ratio = state.stickerWidthMm / state.stickerHeightMm;
-          const newWidth = roundMm(newHeight * ratio, 1);
+        if (state.lockAspectRatio) {
+          let newWidth: number;
+          if (this.isPhotoRatioActive && state.loadedImage && state.loadedImage.sourceWidthPx > 0 && state.loadedImage.sourceHeightPx > 0) {
+            const ratio = state.loadedImage.sourceWidthPx / state.loadedImage.sourceHeightPx;
+            newWidth = calculateWidthFromHeight(newHeight, ratio);
+          } else if (state.stickerHeightMm > 0) {
+            const ratio = state.stickerWidthMm / state.stickerHeightMm;
+            newWidth = roundMm(newHeight * ratio, 1);
+          } else {
+            newWidth = state.stickerWidthMm;
+          }
           inputWidth.value = formatUnitValue(newWidth, state.unit);
           store.update({ stickerWidthMm: newWidth, stickerHeightMm: newHeight });
         } else {
+          this.isPhotoRatioActive = false;
           store.update({ stickerHeightMm: newHeight });
         }
         this.validateStickerDimensions();
@@ -298,8 +325,48 @@ export class UIController {
 
     lockRatioToggle?.addEventListener('change', () => {
       const isLocked = lockRatioToggle.checked;
+      if (!isLocked) {
+        this.isPhotoRatioActive = false;
+      }
       store.update({ lockAspectRatio: isLocked });
       this.updateLockRatioHint(isLocked);
+    });
+
+    const btnApplyPhotoRatio = document.getElementById('btnApplyPhotoRatio') as HTMLButtonElement;
+    btnApplyPhotoRatio?.addEventListener('click', async () => {
+      const state = store.getState();
+      if (!state.loadedImage) {
+        return;
+      }
+
+      const pageDim = store.getPageDimensions();
+      const maxW = Math.max(10, pageDim.widthMm - state.margins.left - state.margins.right);
+      const maxH = Math.max(10, pageDim.heightMm - state.margins.top - state.margins.bottom);
+
+      const fitted = fitDimensionsToPhotoRatio({
+        currentWidthMm: state.stickerWidthMm,
+        currentHeightMm: state.stickerHeightMm,
+        photoWidthPx: state.loadedImage.sourceWidthPx,
+        photoHeightPx: state.loadedImage.sourceHeightPx,
+        maxPageWidthMm: maxW,
+        maxPageHeightMm: maxH,
+      });
+
+      this.isPhotoRatioActive = true;
+      if (lockRatioToggle) lockRatioToggle.checked = true;
+      if (inputWidth) inputWidth.value = formatUnitValue(fitted.widthMm, state.unit);
+      if (inputHeight) inputHeight.value = formatUnitValue(fitted.heightMm, state.unit);
+
+      store.update({
+        stickerWidthMm: fitted.widthMm,
+        stickerHeightMm: fitted.heightMm,
+        cropData: null,
+        lockAspectRatio: true,
+      });
+
+      this.updateLockRatioHint(true, fitted.fraction);
+      this.validateStickerDimensions();
+      await this.recalculateArtwork();
     });
 
     sizingFillBtn?.addEventListener('change', async () => {
@@ -784,71 +851,95 @@ export class UIController {
 
   /**
    * Пересчет кадрированного изображения в максимальном качестве
+   * Использует паттерн Last-Wins Queue: ни одно изменение пользователя не теряется во время асинхронного рендера.
    */
   private async recalculateArtwork() {
     const state = store.getState();
-    if (!state.loadedImage || this.isProcessingImage) return;
+    if (!state.loadedImage) return;
+
+    if (this.isProcessingImage) {
+      this.hasPendingArtworkRecalculation = true;
+      return;
+    }
 
     this.isProcessingImage = true;
     try {
-      const pageDim = store.getPageDimensions();
-      // Вычисляем текущую раскладку, чтобы знать выбранный поворот
-      const layout = calculateLayout({
-        pageWidthMm: pageDim.widthMm,
-        pageHeightMm: pageDim.heightMm,
-        stickerWidthMm: state.stickerWidthMm,
-        stickerHeightMm: state.stickerHeightMm,
-        margins: state.margins,
-        gapX: state.gapX,
-        gapY: state.gapY,
-        allowRotation: state.allowRotation,
-        requestedCopies: state.requestedCopies,
-        spacingMode: state.spacingMode,
-      });
+      do {
+        this.hasPendingArtworkRecalculation = false;
+        const currentState = store.getState();
+        if (!currentState.loadedImage) break;
 
-      const sheetRotation = layout.selectedRotation;
-      const aspectRatio = roundMm(state.stickerWidthMm / state.stickerHeightMm, 4);
+        const pageDim = store.getPageDimensions();
+        // Вычисляем актуальную раскладку, чтобы знать выбранный поворот
+        const layout = calculateLayout({
+          pageWidthMm: pageDim.widthMm,
+          pageHeightMm: pageDim.heightMm,
+          stickerWidthMm: currentState.stickerWidthMm,
+          stickerHeightMm: currentState.stickerHeightMm,
+          margins: currentState.margins,
+          gapX: currentState.gapX,
+          gapY: currentState.gapY,
+          allowRotation: currentState.allowRotation,
+          requestedCopies: currentState.requestedCopies,
+          spacingMode: currentState.spacingMode,
+        });
 
-      const cacheKey = {
-        imageSrc: state.loadedImage.imageElement.src,
-        cropJson: JSON.stringify(state.cropData),
-        sizingMode: state.sizingMode,
-        aspectRatio,
-        sheetRotation,
-      };
+        const sheetRotation = layout.selectedRotation;
+        const aspectRatio = roundMm(currentState.stickerWidthMm / currentState.stickerHeightMm, 4);
 
-      if (
-        this.lastArtworkCache &&
-        this.lastArtworkCache.imageSrc === cacheKey.imageSrc &&
-        this.lastArtworkCache.cropJson === cacheKey.cropJson &&
-        this.lastArtworkCache.sizingMode === cacheKey.sizingMode &&
-        Math.abs(this.lastArtworkCache.aspectRatio - cacheKey.aspectRatio) < 0.001 &&
-        this.lastArtworkCache.sheetRotation === cacheKey.sheetRotation &&
-        state.croppedResult !== null
-      ) {
-        // Кэш актуален: изображение и пропорции не менялись, тяжелый Canvas рендер пропускаем!
-        return;
-      }
+        const cacheKey = {
+          imageSrc: currentState.loadedImage.imageElement.src,
+          cropJson: JSON.stringify(currentState.cropData),
+          sizingMode: currentState.sizingMode,
+          aspectRatio,
+          sheetRotation,
+        };
 
-      const cropped = await renderCroppedArtwork(
-        state.loadedImage.imageElement,
-        state.cropData,
-        state.sizingMode,
-        aspectRatio,
-        state.loadedImage.mimeType,
-        sheetRotation
-      );
+        if (
+          this.lastArtworkCache &&
+          this.lastArtworkCache.imageSrc === cacheKey.imageSrc &&
+          this.lastArtworkCache.cropJson === cacheKey.cropJson &&
+          this.lastArtworkCache.sizingMode === cacheKey.sizingMode &&
+          Math.abs(this.lastArtworkCache.aspectRatio - cacheKey.aspectRatio) < 0.001 &&
+          this.lastArtworkCache.sheetRotation === cacheKey.sheetRotation &&
+          currentState.croppedResult !== null
+        ) {
+          // Кэш актуален, пропускаем тяжелый рендер холста
+          continue;
+        }
 
-      // Расчет эффективного разрешения DPI
-      const dpiDimensionMm = sheetRotation === 90 ? state.stickerHeightMm : state.stickerWidthMm;
-      const dpiInfo = getDpiInfo(cropped.pixelWidth, dpiDimensionMm);
+        const cropped = await renderCroppedArtwork(
+          currentState.loadedImage.imageElement,
+          currentState.cropData,
+          currentState.sizingMode,
+          aspectRatio,
+          currentState.loadedImage.mimeType,
+          sheetRotation
+        );
 
-      this.lastArtworkCache = cacheKey;
+        // Освобождаем предыдущий Blob URL из памяти браузера при создании нового
+        if (this.currentBlobUrl && this.currentBlobUrl.startsWith('blob:') && this.currentBlobUrl !== cropped.dataUrl) {
+          try {
+            URL.revokeObjectURL(this.currentBlobUrl);
+          } catch {
+            // ignore
+          }
+        }
+        if (cropped.dataUrl && cropped.dataUrl.startsWith('blob:')) {
+          this.currentBlobUrl = cropped.dataUrl;
+        }
 
-      store.update({
-        croppedResult: cropped,
-        effectiveDpi: dpiInfo.dpi,
-      });
+        // Расчет эффективного разрешения DPI
+        const dpiDimensionMm = sheetRotation === 90 ? currentState.stickerHeightMm : currentState.stickerWidthMm;
+        const dpiInfo = getDpiInfo(cropped.pixelWidth, dpiDimensionMm);
+
+        this.lastArtworkCache = cacheKey;
+
+        store.update({
+          croppedResult: cropped,
+          effectiveDpi: dpiInfo.dpi,
+        });
+      } while (this.hasPendingArtworkRecalculation);
     } catch (e) {
       console.error('Ошибка нарезки изображения:', e);
     } finally {
@@ -1059,6 +1150,7 @@ export class UIController {
         margins: state.margins,
         layout: this.currentLayout,
         imageUrl: state.croppedResult?.dataUrl || null,
+        sizingMode: state.sizingMode,
         cutMarksConfig: state.cutMarks,
         bleedMm: state.bleedMm,
       });
@@ -1220,6 +1312,20 @@ export class UIController {
     if (btnCrop) {
       btnCrop.disabled = !state.loadedImage;
     }
+
+    // Кнопка применения пропорций фото доступна только если изображение загружено
+    const btnApplyPhotoRatio = document.getElementById('btnApplyPhotoRatio') as HTMLButtonElement;
+    const photoRatioBadge = document.getElementById('photoRatioBadge');
+    if (btnApplyPhotoRatio) {
+      btnApplyPhotoRatio.disabled = !state.loadedImage;
+      if (state.loadedImage && photoRatioBadge) {
+        const fraction = getSimplifiedAspectRatio(state.loadedImage.sourceWidthPx, state.loadedImage.sourceHeightPx);
+        photoRatioBadge.textContent = fraction;
+        photoRatioBadge.style.display = 'inline-block';
+      } else if (photoRatioBadge) {
+        photoRatioBadge.style.display = 'none';
+      }
+    }
   }
 
   /**
@@ -1303,9 +1409,11 @@ export class UIController {
       const dpiTitle = t(gradeTitleMap[dpiInfo.grade] || 'dpiAcceptableTitle');
       const dpiDesc = t(gradeDescMap[dpiInfo.grade] || 'dpiAcceptableDesc');
 
+      const photoFraction = getSimplifiedAspectRatio(state.loadedImage.sourceWidthPx, state.loadedImage.sourceHeightPx);
+
       infoContainer.innerHTML = `
         <div class="image-stats-grid">
-          <div><strong>${t('imgStatSource')}</strong> ${state.loadedImage.sourceWidthPx} × ${state.loadedImage.sourceHeightPx} px</div>
+          <div><strong>${t('imgStatSource')}</strong> ${state.loadedImage.sourceWidthPx} × ${state.loadedImage.sourceHeightPx} px <span class="badge-ratio-val" style="margin-left: 4px; font-size: 0.72rem; padding: 1px 5px; border-radius: 4px; background: #e0f2fe; color: #0369a1; font-weight: 600;">${photoFraction}</span></div>
           <div><strong>${t('imgStatCropped')}</strong> ${state.croppedResult ? `${state.croppedResult.pixelWidth} × ${state.croppedResult.pixelHeight} px` : t('imgStatAuto')}</div>
         </div>
         <div class="dpi-badge-wrapper">
@@ -1462,9 +1570,18 @@ export class UIController {
   /**
    * Обновление динамической подсказки о связывании размеров
    */
-  private updateLockRatioHint(locked: boolean) {
+  private updateLockRatioHint(locked: boolean, customFraction?: string) {
     const hintEl = document.getElementById('lockRatioHint');
     if (hintEl) {
+      if (locked && (this.isPhotoRatioActive || customFraction)) {
+        const fraction = customFraction || (store.getState().loadedImage
+          ? getSimplifiedAspectRatio(store.getState().loadedImage!.sourceWidthPx, store.getState().loadedImage!.sourceHeightPx)
+          : null);
+        if (fraction) {
+          hintEl.textContent = t('hintLockRatioPhoto', { ratio: fraction });
+          return;
+        }
+      }
       hintEl.textContent = t(locked ? 'hintLockRatioOn' : 'hintLockRatioOff');
     }
   }

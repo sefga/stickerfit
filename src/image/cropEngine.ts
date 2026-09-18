@@ -19,6 +19,41 @@ export interface CroppedResult {
 }
 
 /**
+ * Нормализация координат кадрирования под целевое соотношение сторон стикера.
+ * Если сохраненное кадрирование не совпадает с новым aspect ratio, область
+ * пропорционально адаптируется от центра, предотвращая сплющивание исходного изображения.
+ */
+export function normalizeCropRect(
+  cropX: number,
+  cropY: number,
+  cropW: number,
+  cropH: number,
+  targetAspectRatio: number
+): { x: number; y: number; width: number; height: number } {
+  if (targetAspectRatio <= 0 || cropW <= 0 || cropH <= 0) {
+    return { x: cropX, y: cropY, width: Math.max(1, cropW), height: Math.max(1, cropH) };
+  }
+
+  const currentRatio = cropW / cropH;
+  // Допускаем погрешность до 1% для исключения микро-округлений
+  if (Math.abs(currentRatio - targetAspectRatio) / targetAspectRatio <= 0.01) {
+    return { x: cropX, y: cropY, width: cropW, height: cropH };
+  }
+
+  if (currentRatio > targetAspectRatio) {
+    // Область шире целевой -> уменьшаем ширину от центра
+    const targetW = Math.max(1, Math.round(cropH * targetAspectRatio));
+    const newX = Math.max(0, Math.round(cropX + (cropW - targetW) / 2));
+    return { x: newX, y: cropY, width: targetW, height: cropH };
+  } else {
+    // Область выше целевой -> уменьшаем высоту от центра
+    const targetH = Math.max(1, Math.round(cropW / targetAspectRatio));
+    const newY = Math.max(0, Math.round(cropY + (cropH - targetH) / 2));
+    return { x: cropX, y: newY, width: cropW, height: targetH };
+  }
+}
+
+/**
  * Отрисовка и нарезка изображения в максимальном исходном разрешении
  * с учетом координат Cropper.js и режима размещения (Fill / Fit)
  */
@@ -47,10 +82,21 @@ export async function renderCroppedArtwork(
   let rotate = 0;
 
   if (cropData) {
-    cropX = Math.round(cropData.x);
-    cropY = Math.round(cropData.y);
-    cropW = Math.round(cropData.width);
-    cropH = Math.round(cropData.height);
+    let normalized = {
+      x: Math.round(cropData.x),
+      y: Math.round(cropData.y),
+      width: Math.round(cropData.width),
+      height: Math.round(cropData.height),
+    };
+
+    if (sizingMode === 'fill' && aspectRatio > 0) {
+      normalized = normalizeCropRect(normalized.x, normalized.y, normalized.width, normalized.height, aspectRatio);
+    }
+
+    cropX = normalized.x;
+    cropY = normalized.y;
+    cropW = normalized.width;
+    cropH = normalized.height;
     rotate = cropData.rotate || 0;
   } else {
     // Автоматический crop по центру с нужным aspect ratio
@@ -103,8 +149,19 @@ export async function renderCroppedArtwork(
 
     const finalCanvas = sheetRotation === 90 ? applySheetRotation(canvas) : canvas;
     const mimeType = 'image/png'; // PNG для сохранения прозрачных полей Fit
-    const bytes = await canvasToUint8Array(finalCanvas, mimeType);
-    const dataUrl = finalCanvas.toDataURL(mimeType);
+    const blob = await canvasToBlob(finalCanvas, mimeType);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    let dataUrl: string;
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      try {
+        dataUrl = URL.createObjectURL(blob);
+      } catch {
+        dataUrl = finalCanvas.toDataURL(mimeType);
+      }
+    } else {
+      dataUrl = finalCanvas.toDataURL(mimeType);
+    }
 
     return {
       dataUrl,
@@ -128,8 +185,20 @@ export async function renderCroppedArtwork(
       ? 'image/jpeg'
       : 'image/png';
 
-    const bytes = await canvasToUint8Array(finalCanvas, mimeType, 0.98);
-    const dataUrl = finalCanvas.toDataURL(mimeType, 0.98);
+    const quality = mimeType === 'image/jpeg' ? 0.98 : undefined;
+    const blob = await canvasToBlob(finalCanvas, mimeType, quality);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    let dataUrl: string;
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      try {
+        dataUrl = URL.createObjectURL(blob);
+      } catch {
+        dataUrl = finalCanvas.toDataURL(mimeType, quality);
+      }
+    } else {
+      dataUrl = finalCanvas.toDataURL(mimeType, quality);
+    }
 
     return {
       dataUrl,
@@ -186,21 +255,40 @@ function drawRotatedImage(
 }
 
 /**
- * Преобразование HTMLCanvasElement в Uint8Array без лишних конверсий
+ * Преобразование HTMLCanvasElement в Blob
  */
-function canvasToUint8Array(canvas: HTMLCanvasElement, mimeType: string, quality?: number): Promise<Uint8Array> {
+export function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      async (blob) => {
+      (blob) => {
         if (!blob) {
-          reject(new Error('Не удалось сформировать Blob из Canvas.'));
+          try {
+            const dataUrl = canvas.toDataURL(mimeType, quality);
+            const byteString = atob(dataUrl.split(',')[1]);
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+              ia[i] = byteString.charCodeAt(i);
+            }
+            resolve(new Blob([ab], { type: mimeType }));
+          } catch {
+            reject(new Error('Не удалось сформировать Blob из Canvas.'));
+          }
           return;
         }
-        const buffer = await blob.arrayBuffer();
-        resolve(new Uint8Array(buffer));
+        resolve(blob);
       },
       mimeType,
       quality
     );
   });
+}
+
+/**
+ * Преобразование HTMLCanvasElement в Uint8Array без лишних конверсий
+ */
+export async function canvasToUint8Array(canvas: HTMLCanvasElement, mimeType: string, quality?: number): Promise<Uint8Array> {
+  const blob = await canvasToBlob(canvas, mimeType, quality);
+  const buffer = await blob.arrayBuffer();
+  return new Uint8Array(buffer);
 }

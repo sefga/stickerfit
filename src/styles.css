@@ -1569,6 +1569,8 @@ input.input-has-error {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 20px 25px -5px rgba(0, 0, 0, 0.06);
   background: #ffffff;
   width: min(85vw, 560px);
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
   aspect-ratio: 210 / 297;
   display: flex;
   align-items: center;
@@ -1576,13 +1578,14 @@ input.input-has-error {
   border-radius: 4px;
   margin: auto;
   position: relative;
-  transition: aspect-ratio 0.2s ease, width 0.2s ease;
   will-change: transform;
 }
 
 .sheet-shadow-wrapper.landscape {
   aspect-ratio: 297 / 210;
   width: min(88vw, 760px);
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
 }
 
 .sheet-svg {
@@ -2345,6 +2348,8 @@ input.input-has-error {
 
   .sheet-shadow-wrapper {
     width: min(92vw, 420px);
+    max-width: calc(100% - 12px);
+    max-height: calc(100% - 12px);
   }
 
   /* Переключение вкладок на мобильных */

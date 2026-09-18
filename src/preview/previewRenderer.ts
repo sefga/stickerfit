@@ -1,6 +1,7 @@
 import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, generateCutMarks } from '../pdf/cutMarks';
 import { Margins } from '../layout/layoutEngine';
+import { SizingMode } from '../image/cropEngine';
 import { t } from '../i18n';
 
 export interface PreviewOptions {
@@ -9,6 +10,7 @@ export interface PreviewOptions {
   margins: Margins;
   layout: LayoutResult;
   imageUrl?: string | null;
+  sizingMode?: SizingMode;
   cutMarksConfig: CutMarksConfig;
   bleedMm?: number;
 }
@@ -24,6 +26,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     margins,
     layout,
     imageUrl,
+    sizingMode = 'fill',
     cutMarksConfig,
     bleedMm = 0,
   } = options;
@@ -39,7 +42,23 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     `preserveAspectRatio="xMidYMid meet">`
   );
 
-  // Определение стилей и паттернов
+  const firstPos = layout.positions.length > 0 ? layout.positions[0] : null;
+  const stickerW = firstPos ? firstPos.widthMm : 50;
+  const stickerH = firstPos ? firstPos.heightMm : 50;
+  const par = sizingMode === 'fit' ? 'xMidYMid meet' : 'xMidYMid slice';
+  const shouldApplyShadow = layout.positions.length <= 40;
+
+  // Определение стилей, фильтров и переиспользуемых элементов
+  let imageDef = '';
+  if (imageUrl) {
+    imageDef = `
+      <g id="stickerArtSource">
+        <image href="${imageUrl}" x="0" y="0" width="${stickerW}" height="${stickerH}" preserveAspectRatio="${par}" />
+        <rect x="0" y="0" width="${stickerW}" height="${stickerH}" fill="none" stroke="#3b82f6" stroke-width="0.15" opacity="0.6" />
+      </g>
+    `;
+  }
+
   svgParts.push(`
     <defs>
       <pattern id="diagonalHatch" width="4" height="4" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
@@ -48,6 +67,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
       <filter id="stickerShadow" x="-5%" y="-5%" width="110%" height="110%">
         <feDropShadow dx="0" dy="0.3" stdDeviation="0.4" flood-color="#000000" flood-opacity="0.12" />
       </filter>
+      ${imageDef}
     </defs>
   `);
 
@@ -66,7 +86,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     );
   }
 
-  // 4. Отрисовка каждого стикера (с защитой от подвисания DOM при экстремальных значениях)
+  // 4. Отрисовка каждого стикера через легковесные ссылки <use> (мгновенный рендер без лагов DOM)
   const maxRenderPositions = 300;
   const visiblePositions = layout.positions.slice(0, maxRenderPositions);
 
@@ -87,16 +107,20 @@ export function renderPreviewSvg(options: PreviewOptions): string {
 
     // Если загружено изображение
     if (imageUrl) {
-      svgParts.push(
-        `<g filter="url(#stickerShadow)">` +
-        `<image href="${imageUrl}" x="${xMm}" y="${yMm}" width="${widthMm}" height="${heightMm}" preserveAspectRatio="none" />` +
-        `<rect x="${xMm}" y="${yMm}" width="${widthMm}" height="${heightMm}" fill="none" stroke="#3b82f6" stroke-width="0.15" opacity="0.6" />` +
-        `</g>`
-      );
+      if (shouldApplyShadow) {
+        svgParts.push(
+          `<use href="#stickerArtSource" x="${xMm}" y="${yMm}" filter="url(#stickerShadow)" />`
+        );
+      } else {
+        svgParts.push(
+          `<use href="#stickerArtSource" x="${xMm}" y="${yMm}" />`
+        );
+      }
     } else {
       // Плейсхолдер стикера (когда изображение еще не загружено)
+      const shadowAttr = shouldApplyShadow ? ' filter="url(#stickerShadow)"' : '';
       svgParts.push(
-        `<g filter="url(#stickerShadow)">` +
+        `<g${shadowAttr}>` +
         `<rect x="${xMm}" y="${yMm}" width="${widthMm}" height="${heightMm}" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.3" rx="0.5" />` +
         `<text x="${xMm + widthMm / 2}" y="${yMm + heightMm / 2 + 1.5}" ` +
         `font-family="system-ui, -apple-system, sans-serif" font-size="3" fill="#64748b" text-anchor="middle" font-weight="500">` +

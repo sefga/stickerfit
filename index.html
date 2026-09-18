@@ -187,6 +187,14 @@
           </label>
           <div class="field-hint" id="lockRatioHint" data-i18n="hintLockRatioOff">Ширина и высота независимы.</div>
 
+          <div class="aspect-ratio-actions" style="margin-top: 8px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btnApplyPhotoRatio" disabled data-i18n-title="btnApplyPhotoRatioTitle" title="Установить размеры стикера строго по пропорциям загруженного фото">
+              <span class="btn-icon">📷</span>
+              <span data-i18n="btnApplyPhotoRatio">Взять пропорции фото</span>
+              <span class="badge-ratio-val" id="photoRatioBadge" style="display: none; margin-left: 4px; font-size: 0.75rem; padding: 1px 6px; border-radius: 4px; background: #e0f2fe; color: #0369a1; font-weight: 600;"></span>
+            </button>
+          </div>
+
           <div class="form-col" style="margin-top: 12px;">
             <label data-i18n="lblSizingMode">Режим заполнения стикера</label>
             <div class="segmented-control">
