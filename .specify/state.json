@@ -1,0 +1,29 @@
+{
+  "active": true,
+  "taskScope": "Выбор формы стикера (прямоугольник, круг, скругленный) и генерация векторного SVG контура для плоттерной резки 1:1 с оптическими метками",
+  "phase": "VERIFIED",
+  "allowedFiles": [
+    "src/state.ts",
+    "src/urlParams.ts",
+    "src/export/svgCutGenerator.ts",
+    "src/export/svgCutGenerator.test.ts",
+    "src/export/pngGenerator.ts",
+    "src/pdf/pdfGenerator.ts",
+    "src/preview/previewRenderer.ts",
+    "src/ui/controls.ts",
+    "src/i18n.ts",
+    "index.html",
+    "specs/002-plotter-cut-contour/tasks.md",
+    ".specify/state.json"
+  ],
+  "verificationRequired": [
+    "npm run test",
+    "npm run build"
+  ],
+  "verificationEvidence": {
+    "test": "15 test files passed, 118 tests passed, exit code 0",
+    "build": "tsc && vite build exit code 0, 210 modules transformed"
+  },
+  "tasksCompleted": 12,
+  "tasksTotal": 12
+}

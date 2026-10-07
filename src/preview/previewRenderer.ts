@@ -2,6 +2,8 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, generateCutMarks } from '../pdf/cutMarks';
 import { Margins } from '../layout/layoutEngine';
 import { SizingMode } from '../image/cropEngine';
+import { StickerShape } from '../state';
+import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
 import { t } from '../i18n';
 
 export interface PreviewOptions {
@@ -13,6 +15,9 @@ export interface PreviewOptions {
   sizingMode?: SizingMode;
   cutMarksConfig: CutMarksConfig;
   bleedMm?: number;
+  stickerShape?: StickerShape;
+  cornerRadiusMm?: number;
+  registrationMarks?: boolean;
 }
 
 /**
@@ -29,6 +34,9 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     sizingMode = 'fill',
     cutMarksConfig,
     bleedMm = 0,
+    stickerShape = 'rect',
+    cornerRadiusMm = 3,
+    registrationMarks = false,
   } = options;
 
   const svgParts: string[] = [];
@@ -48,13 +56,37 @@ export function renderPreviewSvg(options: PreviewOptions): string {
   const par = sizingMode === 'fit' ? 'xMidYMid meet' : 'xMidYMid slice';
   const shouldApplyShadow = layout.positions.length <= 40;
 
+  const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(stickerW, stickerH) / 2));
+
+  // Определение клип-пути для формы стикера
+  let clipGeometry = '';
+  let strokeContour = '';
+
+  if (stickerShape === 'circle') {
+    const d = Math.min(stickerW, stickerH);
+    const r = d / 2;
+    clipGeometry = `<circle cx="${stickerW / 2}" cy="${stickerH / 2}" r="${r}" />`;
+    strokeContour = `<circle cx="${stickerW / 2}" cy="${stickerH / 2}" r="${r}" fill="none" stroke="#ef4444" stroke-width="0.2" stroke-dasharray="1.2,0.8" />`;
+  } else if (stickerShape === 'rounded') {
+    clipGeometry = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" rx="${clampedRadius}" ry="${clampedRadius}" />`;
+    strokeContour = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" rx="${clampedRadius}" ry="${clampedRadius}" fill="none" stroke="#ef4444" stroke-width="0.2" stroke-dasharray="1.2,0.8" />`;
+  } else {
+    clipGeometry = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" />`;
+    strokeContour = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" fill="none" stroke="#ef4444" stroke-width="0.2" stroke-dasharray="1.2,0.8" />`;
+  }
+
   // Определение стилей, фильтров и переиспользуемых элементов
   let imageDef = '';
   if (imageUrl) {
     imageDef = `
+      <clipPath id="stickerShapeClip">
+        ${clipGeometry}
+      </clipPath>
       <g id="stickerArtSource">
-        <image href="${imageUrl}" x="0" y="0" width="${stickerW}" height="${stickerH}" preserveAspectRatio="${par}" />
-        <rect x="0" y="0" width="${stickerW}" height="${stickerH}" fill="none" stroke="#3b82f6" stroke-width="0.15" opacity="0.6" />
+        <g clip-path="url(#stickerShapeClip)">
+          <image href="${imageUrl}" x="0" y="0" width="${stickerW}" height="${stickerH}" preserveAspectRatio="${par}" />
+        </g>
+        ${strokeContour}
       </g>
     `;
   }
@@ -86,7 +118,21 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     );
   }
 
-  // 4. Отрисовка каждого стикера через легковесные ссылки <use> (мгновенный рендер без лагов DOM)
+  // 4. Оптические метки совмещения плоттера (если включены)
+  if (registrationMarks) {
+    const marks = getRegistrationMarksPositions(pageWidthMm, pageHeightMm, 8);
+    svgParts.push(`<g id="previewRegistrationMarks" stroke="#000000" stroke-width="0.25" fill="none">`);
+    for (const m of marks) {
+      svgParts.push(`  <line x1="${m.cx - 4}" y1="${m.cy}" x2="${m.cx + 4}" y2="${m.cy}" />`);
+      svgParts.push(`  <line x1="${m.cx}" y1="${m.cy - 4}" x2="${m.cx}" y2="${m.cy + 4}" />`);
+      svgParts.push(`  <circle cx="${m.cx}" cy="${m.cy}" r="1.5" />`);
+    }
+    const tl = marks[0];
+    svgParts.push(`  <rect x="${tl.cx - 1.5}" y="${tl.cy - 1.5}" width="3" height="3" fill="#000000" stroke="none" />`);
+    svgParts.push(`</g>`);
+  }
+
+  // 5. Отрисовка каждого стикера через легковесные ссылки <use>
   const maxRenderPositions = 300;
   const visiblePositions = layout.positions.slice(0, maxRenderPositions);
 
@@ -95,14 +141,33 @@ export function renderPreviewSvg(options: PreviewOptions): string {
 
     // Зона Bleed (если включен)
     if (bleedMm > 0) {
-      const bX = xMm - bleedMm;
-      const bY = yMm - bleedMm;
-      const bW = widthMm + bleedMm * 2;
-      const bH = heightMm + bleedMm * 2;
-      svgParts.push(
-        `<rect x="${bX}" y="${bY}" width="${bW}" height="${bH}" ` +
-        `fill="#fef3c7" fill-opacity="0.6" stroke="#f59e0b" stroke-width="0.15" stroke-dasharray="0.8,0.8" />`
-      );
+      if (stickerShape === 'circle') {
+        const d = Math.min(widthMm, heightMm);
+        const rBleed = d / 2 + bleedMm;
+        svgParts.push(
+          `<circle cx="${xMm + widthMm / 2}" cy="${yMm + heightMm / 2}" r="${rBleed}" ` +
+          `fill="#fef3c7" fill-opacity="0.6" stroke="#f59e0b" stroke-width="0.15" stroke-dasharray="0.8,0.8" />`
+        );
+      } else if (stickerShape === 'rounded') {
+        const bX = xMm - bleedMm;
+        const bY = yMm - bleedMm;
+        const bW = widthMm + bleedMm * 2;
+        const bH = heightMm + bleedMm * 2;
+        const rBleed = clampedRadius + bleedMm;
+        svgParts.push(
+          `<rect x="${bX}" y="${bY}" width="${bW}" height="${bH}" rx="${rBleed}" ry="${rBleed}" ` +
+          `fill="#fef3c7" fill-opacity="0.6" stroke="#f59e0b" stroke-width="0.15" stroke-dasharray="0.8,0.8" />`
+        );
+      } else {
+        const bX = xMm - bleedMm;
+        const bY = yMm - bleedMm;
+        const bW = widthMm + bleedMm * 2;
+        const bH = heightMm + bleedMm * 2;
+        svgParts.push(
+          `<rect x="${bX}" y="${bY}" width="${bW}" height="${bH}" ` +
+          `fill="#fef3c7" fill-opacity="0.6" stroke="#f59e0b" stroke-width="0.15" stroke-dasharray="0.8,0.8" />`
+        );
+      }
     }
 
     // Если загружено изображение
@@ -119,9 +184,19 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     } else {
       // Плейсхолдер стикера (когда изображение еще не загружено)
       const shadowAttr = shouldApplyShadow ? ' filter="url(#stickerShadow)"' : '';
+      let placeholderShape = '';
+      if (stickerShape === 'circle') {
+        const d = Math.min(widthMm, heightMm);
+        placeholderShape = `<circle cx="${xMm + widthMm / 2}" cy="${yMm + heightMm / 2}" r="${d / 2}" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.3" />`;
+      } else if (stickerShape === 'rounded') {
+        placeholderShape = `<rect x="${xMm}" y="${yMm}" width="${widthMm}" height="${heightMm}" rx="${clampedRadius}" ry="${clampedRadius}" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.3" />`;
+      } else {
+        placeholderShape = `<rect x="${xMm}" y="${yMm}" width="${widthMm}" height="${heightMm}" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.3" rx="0.5" />`;
+      }
+
       svgParts.push(
         `<g${shadowAttr}>` +
-        `<rect x="${xMm}" y="${yMm}" width="${widthMm}" height="${heightMm}" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.3" rx="0.5" />` +
+        placeholderShape +
         `<text x="${xMm + widthMm / 2}" y="${yMm + heightMm / 2 + 1.5}" ` +
         `font-family="system-ui, -apple-system, sans-serif" font-size="3" fill="#64748b" text-anchor="middle" font-weight="500">` +
         `${t('previewStickerPlaceholder', { idx: idx + 1, w: Math.round(widthMm), h: Math.round(heightMm) })}</text>` +
@@ -141,7 +216,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     `);
   }
 
-  // 5. Векторные метки реза (Cut marks)
+  // 6. Векторные метки реза (Cut marks)
   if (cutMarksConfig.enabled && layout.positions.length > 0) {
     const marks = generateCutMarks(layout.positions, cutMarksConfig);
     for (const mark of marks) {
@@ -152,7 +227,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     }
   }
 
-  // 6. Закрывающий тег SVG
+  // 7. Закрывающий тег SVG
   svgParts.push(`</svg>`);
 
   return svgParts.join('\n');

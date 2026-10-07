@@ -1,5 +1,7 @@
 import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, generateCutMarks } from '../pdf/cutMarks';
+import { StickerShape } from '../state';
+import { getRegistrationMarksPositions } from './svgCutGenerator';
 import { t } from '../i18n';
 
 export interface PngExportOptions {
@@ -11,6 +13,9 @@ export interface PngExportOptions {
   cutMarks?: CutMarksConfig;
   bleedMm?: number;
   dpi?: number;
+  stickerShape?: StickerShape;
+  cornerRadiusMm?: number;
+  registrationMarks?: boolean;
 }
 
 /**
@@ -26,6 +31,9 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
     dpi = 300,
+    stickerShape = 'rect',
+    cornerRadiusMm = 3,
+    registrationMarks = false,
   } = options;
 
   const dpmm = dpi / 25.4; // Пикселей на миллиметр при заданном DPI
@@ -75,14 +83,55 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
     const ph = Math.round(artHMm * dpmm);
 
     if (imgToDraw) {
-      ctx.drawImage(imgToDraw, px, py, pw, ph);
+      if (stickerShape === 'circle') {
+        ctx.save();
+        ctx.beginPath();
+        const radius = Math.min(pw, ph) / 2;
+        ctx.arc(px + pw / 2, py + ph / 2, radius, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(imgToDraw, px, py, pw, ph);
+        ctx.restore();
+      } else if (stickerShape === 'rounded') {
+        ctx.save();
+        ctx.beginPath();
+        const rPx = Math.min(pw / 2, ph / 2, Math.max(0, (cornerRadiusMm + bleedMm) * dpmm));
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(px, py, pw, ph, rPx);
+        } else {
+          ctx.rect(px, py, pw, ph);
+        }
+        ctx.clip();
+        ctx.drawImage(imgToDraw, px, py, pw, ph);
+        ctx.restore();
+      } else {
+        ctx.drawImage(imgToDraw, px, py, pw, ph);
+      }
     } else {
       // Отрисовка аккуратного плейсхолдера для пустого стикера
       ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(px, py, pw, ph);
       ctx.strokeStyle = '#94a3b8';
       ctx.lineWidth = Math.max(1, Math.round(0.3 * dpmm));
-      ctx.strokeRect(px, py, pw, ph);
+
+      if (stickerShape === 'circle') {
+        const radius = Math.min(pw, ph) / 2;
+        ctx.beginPath();
+        ctx.arc(px + pw / 2, py + ph / 2, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (stickerShape === 'rounded') {
+        const rPx = Math.min(pw / 2, ph / 2, Math.max(0, (cornerRadiusMm + bleedMm) * dpmm));
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(px, py, pw, ph, rPx);
+        } else {
+          ctx.rect(px, py, pw, ph);
+        }
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(px, py, pw, ph);
+        ctx.strokeRect(px, py, pw, ph);
+      }
 
       // Номер стикера и размеры
       ctx.fillStyle = '#64748b';
@@ -98,7 +147,41 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
     }
   }
 
-  // 4. Векторные метки реза (Cut marks)
+  // 4. Оптические метки совмещения плоттера (Registration Marks)
+  if (registrationMarks) {
+    const markPositions = getRegistrationMarksPositions(pageWidthMm, pageHeightMm, 8);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = Math.max(1, Math.round(0.25 * (dpi / 25.4)));
+    const armPx = Math.round(4 * dpmm);
+    const targetRPx = Math.round(1.5 * dpmm);
+
+    for (const mark of markPositions) {
+      const cxPx = Math.round(mark.cx * dpmm);
+      const cyPx = Math.round(mark.cy * dpmm);
+
+      ctx.beginPath();
+      ctx.moveTo(cxPx - armPx, cyPx);
+      ctx.lineTo(cxPx + armPx, cyPx);
+      ctx.moveTo(cxPx, cyPx - armPx);
+      ctx.lineTo(cxPx, cyPx + armPx);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(cxPx, cyPx, targetRPx, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    const tl = markPositions[0];
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(
+      Math.round((tl.cx - 1.5) * dpmm),
+      Math.round((tl.cy - 1.5) * dpmm),
+      Math.round(3 * dpmm),
+      Math.round(3 * dpmm)
+    );
+  }
+
+  // 5. Векторные метки реза (Cut marks)
   if (cutMarks.enabled && layout.positions.length > 0) {
     const lines = generateCutMarks(layout.positions, cutMarks);
     ctx.strokeStyle = '#1e293b';

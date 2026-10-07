@@ -222,5 +222,43 @@ export function parseUrlSettings(queryString: string): Partial<AppSettings> {
     patch.bleedMm = bleed;
   }
 
+  // 9. Форма стикера (shape: rect | circle | rounded)
+  for (const key of ['shape', 'stickerShape', 'form']) {
+    const raw = params.get(key);
+    if (raw) {
+      const lower = raw.trim().toLowerCase();
+      if (['circle', 'round', 'круг', 'окружность'].includes(lower)) {
+        patch.stickerShape = 'circle';
+        break;
+      } else if (['rounded', 'roundrect', 'скругленный'].includes(lower)) {
+        patch.stickerShape = 'rounded';
+        break;
+      } else if (['rect', 'rectangle', 'square', 'прямоугольник', 'квадрат'].includes(lower)) {
+        patch.stickerShape = 'rect';
+        break;
+      }
+    }
+  }
+
+  // 9.1 Диаметр (если задан напрямую: diameter, d)
+  const diameter = parseNumber(params, ['diameter', 'd', 'диаметр'], 5, 297);
+  if (diameter !== null) {
+    patch.stickerShape = 'circle';
+    patch.stickerWidthMm = diameter;
+    patch.stickerHeightMm = diameter;
+  }
+
+  // 9.2 Радиус скругления (radius, r, cornerRadius)
+  const radius = parseNumber(params, ['radius', 'r', 'cornerRadius', 'cornerRadiusMm'], 0.5, 50);
+  if (radius !== null) {
+    patch.cornerRadiusMm = radius;
+  }
+
+  // 10. Оптические метки совмещения плоттера (regMarks, registrationMarks)
+  const regMarks = parseBoolean(params, ['regMarks', 'registrationMarks', 'plotterMarks']);
+  if (regMarks !== null) {
+    patch.registrationMarks = regMarks;
+  }
+
   return patch;
 }

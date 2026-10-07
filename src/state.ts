@@ -10,6 +10,8 @@ export type PageOrientation = 'portrait' | 'landscape';
 
 export type PngDpi = 150 | 300 | 600;
 
+export type StickerShape = 'rect' | 'circle' | 'rounded';
+
 export interface AppSettings {
   unit: Unit;
   paperFormatId: string;
@@ -20,6 +22,8 @@ export interface AppSettings {
   stickerWidthMm: number;
   stickerHeightMm: number;
   lockAspectRatio: boolean;
+  stickerShape: StickerShape;
+  cornerRadiusMm: number;
   sizingMode: SizingMode;
   margins: Margins;
   linkMargins: boolean;
@@ -30,6 +34,7 @@ export interface AppSettings {
   allowRotation: boolean;
   requestedCopies: number | 'AUTO';
   cutMarks: CutMarksConfig;
+  registrationMarks: boolean;
   bleedMm: number;
   pngDpi: PngDpi;
 }
@@ -56,6 +61,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   stickerWidthMm: 54.0,
   stickerHeightMm: 85.0,
   lockAspectRatio: false,
+  stickerShape: 'rect',
+  cornerRadiusMm: 3.0,
   sizingMode: 'fill',
   margins: { top: 5, bottom: 5, left: 5, right: 5 },
   linkMargins: true,
@@ -66,6 +73,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   allowRotation: true,
   requestedCopies: 'AUTO',
   cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG },
+  registrationMarks: false,
   bleedMm: 0,
   pngDpi: 300,
 };
@@ -113,6 +121,8 @@ export function saveSettings(settings: AppSettings): void {
       stickerWidthMm: settings.stickerWidthMm,
       stickerHeightMm: settings.stickerHeightMm,
       lockAspectRatio: settings.lockAspectRatio,
+      stickerShape: settings.stickerShape || 'rect',
+      cornerRadiusMm: settings.cornerRadiusMm !== undefined ? settings.cornerRadiusMm : 3.0,
       sizingMode: settings.sizingMode,
       margins: settings.margins,
       linkMargins: settings.linkMargins,
@@ -123,6 +133,7 @@ export function saveSettings(settings: AppSettings): void {
       allowRotation: settings.allowRotation,
       requestedCopies: settings.requestedCopies,
       cutMarks: settings.cutMarks,
+      registrationMarks: Boolean(settings.registrationMarks),
       bleedMm: settings.bleedMm,
       pngDpi: settings.pngDpi || 300,
     };

@@ -50,10 +50,12 @@ export type AnalyticsEvent =
         widthMm: number;
         heightMm: number;
         copies: number;
-        bleedMm: number;
+        bleedMm?: number;
         orientation?: string;
         paperFormat?: string;
         unit?: string;
+        shape?: string;
+        type?: string;
       };
     }
   | {

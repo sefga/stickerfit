@@ -1552,6 +1552,16 @@ input.input-has-error {
   box-shadow: 0 3px 8px rgba(16, 185, 129, 0.38);
 }
 
+.btn-header-export-svg {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.28);
+}
+
+.btn-header-export-svg:hover {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.38);
+}
+
 .sheet-viewport-wrapper {
   flex: 1;
   display: flex;

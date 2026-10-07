@@ -1,4 +1,4 @@
-import { store, AppState, PageOrientation, PngDpi } from '../state';
+import { store, AppState, PageOrientation, PngDpi, StickerShape } from '../state';
 import { calculateLayout, LayoutResult, SpacingMode } from '../layout/layoutEngine';
 import { loadSourceImage, extractImageFromClipboard, isSupportedImageType } from '../image/imageLoader';
 import { renderCroppedArtwork, CropData } from '../image/cropEngine';
@@ -6,6 +6,7 @@ import { getDpiInfo } from '../image/dpiCalculator';
 import { cropDialog } from './cropDialog';
 import { generateStickerSheetPdf, downloadPdfBlob, openPdfForPrint } from '../pdf/pdfGenerator';
 import { generateStickerSheetPng, downloadPngBlob } from '../export/pngGenerator';
+import { generateStickerCutSvg, downloadCutSvgBlob } from '../export/svgCutGenerator';
 import { ZoomController } from '../preview/zoomController';
 import { createCalibrationPdf } from '../pdf/calibrationPage';
 import { renderPreviewSvg } from '../preview/previewRenderer';
@@ -257,6 +258,48 @@ export class UIController {
     const sizingFillBtn = document.getElementById('sizingFill') as HTMLInputElement;
     const sizingFitBtn = document.getElementById('sizingFit') as HTMLInputElement;
 
+    // Выбор формы стикера (Прямоугольник / Круг / Скругленный)
+    const shapeRect = document.getElementById('shapeRect') as HTMLInputElement;
+    const shapeCircle = document.getElementById('shapeCircle') as HTMLInputElement;
+    const shapeRounded = document.getElementById('shapeRounded') as HTMLInputElement;
+    const cornerRadiusInput = document.getElementById('cornerRadius') as HTMLInputElement;
+
+    const handleShapeSwitch = async (shape: StickerShape) => {
+      const state = store.getState();
+      if (shape === 'circle') {
+        const d = state.stickerWidthMm;
+        store.update({
+          stickerShape: 'circle',
+          stickerHeightMm: d,
+          lockAspectRatio: true,
+        });
+        if (inputHeight) inputHeight.value = formatUnitValue(d, state.unit);
+        if (lockRatioToggle) lockRatioToggle.checked = true;
+      } else if (shape === 'rounded') {
+        store.update({ stickerShape: 'rounded' });
+      } else {
+        store.update({ stickerShape: 'rect' });
+      }
+      this.syncShapeUi(shape);
+      this.validateStickerDimensions();
+      await this.recalculateArtwork();
+    };
+
+    shapeRect?.addEventListener('change', () => { if (shapeRect.checked) handleShapeSwitch('rect'); });
+    shapeCircle?.addEventListener('change', () => { if (shapeCircle.checked) handleShapeSwitch('circle'); });
+    shapeRounded?.addEventListener('change', () => { if (shapeRounded.checked) handleShapeSwitch('rounded'); });
+
+    this.bindSmartNumberInput(cornerRadiusInput, {
+      min: 0.5,
+      max: 100,
+      getFallback: () => fromMm(store.getState().cornerRadiusMm, store.getState().unit),
+      onCommit: async (valInUnit) => {
+        const valMm = toMm(valInUnit, store.getState().unit);
+        store.update({ cornerRadiusMm: valMm });
+        await this.recalculateArtwork();
+      },
+    });
+
     this.bindSmartNumberInput(inputWidth, {
       min: 0.1,
       max: 2000,
@@ -268,7 +311,10 @@ export class UIController {
       onCommit: async (valInUnit) => {
         const state = store.getState();
         const newWidth = toMm(valInUnit, state.unit);
-        if (state.lockAspectRatio) {
+        if (state.stickerShape === 'circle') {
+          inputHeight.value = formatUnitValue(newWidth, state.unit);
+          store.update({ stickerWidthMm: newWidth, stickerHeightMm: newWidth, lockAspectRatio: true });
+        } else if (state.lockAspectRatio) {
           let newHeight: number;
           if (this.isPhotoRatioActive && state.loadedImage && state.loadedImage.sourceWidthPx > 0 && state.loadedImage.sourceHeightPx > 0) {
             const ratio = state.loadedImage.sourceWidthPx / state.loadedImage.sourceHeightPx;
@@ -652,11 +698,17 @@ export class UIController {
       });
     });
 
+    const regMarksToggle = document.getElementById('registrationMarksEnabled') as HTMLInputElement;
+    regMarksToggle?.addEventListener('change', async () => {
+      store.update({ registrationMarks: regMarksToggle.checked });
+      await this.recalculateArtwork();
+    });
+
     bleedSelect?.addEventListener('change', () => {
       store.update({ bleedMm: parseInt(bleedSelect.value, 10) || 0 });
     });
 
-    // 8. Кнопки экспорта (PDF и PNG)
+    // 8. Кнопки экспорта (PDF, PNG и контур SVG)
     const pngDpiRadios = document.querySelectorAll('input[name="pngDpi"]');
     pngDpiRadios.forEach((radio) => {
       radio.addEventListener('change', (e) => {
@@ -673,6 +725,8 @@ export class UIController {
     document.getElementById('btnHeaderDownloadPdf')?.addEventListener('click', () => this.handleDownloadPdf());
     document.getElementById('btnDownloadPng')?.addEventListener('click', () => this.handleDownloadPng());
     document.getElementById('btnHeaderDownloadPng')?.addEventListener('click', () => this.handleDownloadPng());
+    document.getElementById('btnDownloadCutSvg')?.addEventListener('click', () => this.handleDownloadCutSvg());
+    document.getElementById('btnHeaderDownloadSvg')?.addEventListener('click', () => this.handleDownloadCutSvg());
     document.getElementById('btnPrintPdf')?.addEventListener('click', () => this.handlePrintPdf());
     document.getElementById('btnCalibrationPdf')?.addEventListener('click', () => this.handleCalibrationPdf());
     document.getElementById('btnResetSettings')?.addEventListener('click', () => {
@@ -967,6 +1021,9 @@ export class UIController {
       imageMimeType: state.croppedResult?.mimeType,
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
+      stickerShape: state.stickerShape,
+      cornerRadiusMm: state.cornerRadiusMm,
+      registrationMarks: state.registrationMarks,
     });
 
     const formatName = state.paperFormatId.toLowerCase();
@@ -984,6 +1041,43 @@ export class UIController {
         orientation: state.pageOrientation,
         paperFormat: state.paperFormatId,
         unit: state.unit,
+      },
+    });
+  }
+
+  /**
+   * Экспорт чистого векторного 1:1 SVG контура для плоттерной резки
+   */
+  private handleDownloadCutSvg() {
+    if (!this.currentLayout || this.currentLayout.positions.length === 0) {
+      alert(t('alertNoStickers'));
+      return;
+    }
+
+    const state = store.getState();
+    const pageDim = store.getPageDimensions();
+
+    const svgContent = generateStickerCutSvg({
+      pageWidthMm: pageDim.widthMm,
+      pageHeightMm: pageDim.heightMm,
+      layout: this.currentLayout,
+      shape: state.stickerShape,
+      cornerRadiusMm: state.cornerRadiusMm,
+      registrationMarks: state.registrationMarks,
+    });
+
+    const formatName = state.paperFormatId.toLowerCase();
+    const filename = `stickers-cut-${formatName}-${state.stickerWidthMm}x${state.stickerHeightMm}mm-${this.currentLayout.actualCopies}pcs.svg`;
+    downloadCutSvgBlob(svgContent, filename);
+
+    trackEvent({
+      name: 'pdf_downloaded',
+      data: {
+        widthMm: state.stickerWidthMm,
+        heightMm: state.stickerHeightMm,
+        copies: this.currentLayout.actualCopies,
+        shape: state.stickerShape,
+        type: 'svg_cut_contour',
       },
     });
   }
@@ -1010,6 +1104,9 @@ export class UIController {
         cutMarks: state.cutMarks,
         bleedMm: state.bleedMm,
         dpi,
+        stickerShape: state.stickerShape,
+        cornerRadiusMm: state.cornerRadiusMm,
+        registrationMarks: state.registrationMarks,
       });
 
       const formatName = state.paperFormatId.toLowerCase();
@@ -1076,6 +1173,9 @@ export class UIController {
       imageMimeType: state.croppedResult?.mimeType,
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
+      stickerShape: state.stickerShape,
+      cornerRadiusMm: state.cornerRadiusMm,
+      registrationMarks: state.registrationMarks,
     });
 
     openPdfForPrint(pdfBytes);
@@ -1153,6 +1253,9 @@ export class UIController {
         sizingMode: state.sizingMode,
         cutMarksConfig: state.cutMarks,
         bleedMm: state.bleedMm,
+        stickerShape: state.stickerShape,
+        cornerRadiusMm: state.cornerRadiusMm,
+        registrationMarks: state.registrationMarks,
       });
     }
   }
@@ -1307,6 +1410,15 @@ export class UIController {
     const bleedSelect = document.getElementById('bleedSelect') as HTMLSelectElement;
     if (bleedSelect) bleedSelect.value = state.bleedMm.toString();
 
+    // Форма стикера, скругление и оптические метки совмещения плоттера
+    const shape = state.stickerShape || 'rect';
+    setChecked('shapeRect', shape === 'rect');
+    setChecked('shapeCircle', shape === 'circle');
+    setChecked('shapeRounded', shape === 'rounded');
+    this.syncShapeUi(shape);
+    setVal('cornerRadius', formatUnitValue(state.cornerRadiusMm !== undefined ? state.cornerRadiusMm : 3, state.unit));
+    setChecked('registrationMarksEnabled', Boolean(state.registrationMarks));
+
     // Кнопка кадрирования доступна только если изображение загружено
     const btnCrop = document.getElementById('btnOpenCrop') as HTMLButtonElement;
     if (btnCrop) {
@@ -1325,6 +1437,32 @@ export class UIController {
       } else if (photoRatioBadge) {
         photoRatioBadge.style.display = 'none';
       }
+    }
+  }
+
+  /**
+   * Синхронизация видимости полей ввода в зависимости от формы стикера (круг / скругленный / прямоугольник)
+   */
+  private syncShapeUi(shape: StickerShape) {
+    const state = store.getState();
+    const lblStickerWidth = document.getElementById('lblStickerWidth');
+    const colStickerHeight = document.getElementById('colStickerHeight');
+    const cornerRadiusGroup = document.getElementById('cornerRadiusGroup');
+    const lang = (localStorage.getItem('sticker_sheet_lang') as 'ru' | 'en') || 'ru';
+    const symbol = getUnitSymbol(state.unit, lang);
+
+    if (shape === 'circle') {
+      if (lblStickerWidth) lblStickerWidth.textContent = t('lblDiameterUnit', { unit: symbol });
+      if (colStickerHeight) colStickerHeight.style.display = 'none';
+      if (cornerRadiusGroup) cornerRadiusGroup.style.display = 'none';
+    } else if (shape === 'rounded') {
+      if (lblStickerWidth) lblStickerWidth.textContent = t('lblWidthUnit', { unit: symbol });
+      if (colStickerHeight) colStickerHeight.style.display = '';
+      if (cornerRadiusGroup) cornerRadiusGroup.style.display = '';
+    } else {
+      if (lblStickerWidth) lblStickerWidth.textContent = t('lblWidthUnit', { unit: symbol });
+      if (colStickerHeight) colStickerHeight.style.display = '';
+      if (cornerRadiusGroup) cornerRadiusGroup.style.display = 'none';
     }
   }
 
@@ -1354,8 +1492,14 @@ export class UIController {
       if (el) el.textContent = text;
     };
 
-    setLabel('lblStickerWidth', t('lblWidthUnit', { unit: symbol }));
+    const state = store.getState();
+    if (state.stickerShape === 'circle') {
+      setLabel('lblStickerWidth', t('lblDiameterUnit', { unit: symbol }));
+    } else {
+      setLabel('lblStickerWidth', t('lblWidthUnit', { unit: symbol }));
+    }
     setLabel('lblStickerHeight', t('lblHeightUnit', { unit: symbol }));
+    setLabel('lblCornerRadius', t('lblCornerRadiusUnit', { unit: symbol }));
     setLabel('lblMarginTop', t('lblMarginTopUnit', { unit: symbol }));
     setLabel('lblMarginBottom', t('lblMarginBottomUnit', { unit: symbol }));
     setLabel('lblMarginLeft', t('lblMarginLeftUnit', { unit: symbol }));

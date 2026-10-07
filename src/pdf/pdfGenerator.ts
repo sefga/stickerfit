@@ -1,7 +1,9 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { mmToPoints } from '../units/mm';
 import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, drawCutMarksOnPdf, generateCutMarks } from './cutMarks';
+import { StickerShape } from '../state';
+import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
 
 export interface PdfExportOptions {
   pageWidthMm: number;
@@ -11,6 +13,9 @@ export interface PdfExportOptions {
   imageMimeType?: string;
   cutMarks?: CutMarksConfig;
   bleedMm?: number; // 0, 1, 2, 3 мм
+  stickerShape?: StickerShape;
+  cornerRadiusMm?: number;
+  registrationMarks?: boolean;
 }
 
 /**
@@ -25,6 +30,7 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
     imageMimeType,
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
+    registrationMarks = false,
   } = options;
 
   const pdfDoc = await PDFDocument.create();
@@ -75,6 +81,57 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
   if (cutMarks.enabled && layout.positions.length > 0) {
     const lines = generateCutMarks(layout.positions, cutMarks);
     drawCutMarksOnPdf(page, lines, pageHeightPt, cutMarks.lineWidthPt);
+  }
+
+  // Оптические метки совмещения плоттера (Registration Marks)
+  if (registrationMarks) {
+    const markPositions = getRegistrationMarksPositions(pageWidthMm, pageHeightMm, 8);
+    const armPt = mmToPoints(4);
+    const targetRPt = mmToPoints(1.5);
+    const strokeBlack = rgb(0, 0, 0);
+
+    for (const mark of markPositions) {
+      const cxPt = mmToPoints(mark.cx);
+      const cyPt = pageHeightPt - mmToPoints(mark.cy);
+
+      // Горизонтальная линия
+      page.drawLine({
+        start: { x: cxPt - armPt, y: cyPt },
+        end: { x: cxPt + armPt, y: cyPt },
+        thickness: 0.5,
+        color: strokeBlack,
+      });
+
+      // Вертикальная линия
+      page.drawLine({
+        start: { x: cxPt, y: cyPt - armPt },
+        end: { x: cxPt, y: cyPt + armPt },
+        thickness: 0.5,
+        color: strokeBlack,
+      });
+
+      // Прицельный круг
+      page.drawCircle({
+        x: cxPt,
+        y: cyPt,
+        size: targetRPt,
+        borderWidth: 0.5,
+        borderColor: strokeBlack,
+      });
+    }
+
+    // Маркер ориентации верха страницы (квадрат 3х3 мм в верхнем левом углу)
+    const tl = markPositions[0];
+    const tlCxPt = mmToPoints(tl.cx);
+    const tlCyPt = pageHeightPt - mmToPoints(tl.cy);
+    const sqHalfPt = mmToPoints(1.5);
+    page.drawRectangle({
+      x: tlCxPt - sqHalfPt,
+      y: tlCyPt - sqHalfPt,
+      width: sqHalfPt * 2,
+      height: sqHalfPt * 2,
+      color: strokeBlack,
+    });
   }
 
   return await pdfDoc.save();
