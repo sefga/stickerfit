@@ -1,19 +1,20 @@
 {
   "active": true,
-  "taskScope": "Выбор формы стикера (прямоугольник, круг, скругленный) и генерация векторного SVG контура для плоттерной резки 1:1 с оптическими метками",
+  "taskScope": "Устранение расхождений резки и печати: круглая/скругленная маска в PDF, вылеты без искажения масштаба ядра, исключение резки реперов в SVG по умолчанию, фиксация габаритов А4 для WYSIWYG, отображение калибровочных расстояний меток и валидация зазоров Bleed",
   "phase": "VERIFIED",
   "allowedFiles": [
-    "src/state.ts",
-    "src/urlParams.ts",
+    "src/pdf/pdfGenerator.ts",
+    "src/pdf/pdfGenerator.test.ts",
     "src/export/svgCutGenerator.ts",
     "src/export/svgCutGenerator.test.ts",
-    "src/export/pngGenerator.ts",
-    "src/pdf/pdfGenerator.ts",
-    "src/preview/previewRenderer.ts",
+    "src/state.ts",
     "src/ui/controls.ts",
     "src/i18n.ts",
     "index.html",
-    "specs/002-plotter-cut-contour/tasks.md",
+    "specs/003-plotter-cut-precision/spec.md",
+    "specs/003-plotter-cut-precision/plan.md",
+    "specs/003-plotter-cut-precision/checklists/requirements.md",
+    "specs/003-plotter-cut-precision/tasks.md",
     ".specify/state.json"
   ],
   "verificationRequired": [
@@ -21,9 +22,9 @@
     "npm run build"
   ],
   "verificationEvidence": {
-    "test": "15 test files passed, 118 tests passed, exit code 0",
+    "test": "15 test files passed, 119 tests passed, exit code 0",
     "build": "tsc && vite build exit code 0, 210 modules transformed"
   },
-  "tasksCompleted": 12,
-  "tasksTotal": 12
+  "tasksCompleted": 8,
+  "tasksTotal": 8
 }

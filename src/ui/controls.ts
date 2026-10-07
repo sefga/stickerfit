@@ -6,7 +6,7 @@ import { getDpiInfo } from '../image/dpiCalculator';
 import { cropDialog } from './cropDialog';
 import { generateStickerSheetPdf, downloadPdfBlob, openPdfForPrint } from '../pdf/pdfGenerator';
 import { generateStickerSheetPng, downloadPngBlob } from '../export/pngGenerator';
-import { generateStickerCutSvg, downloadCutSvgBlob } from '../export/svgCutGenerator';
+import { generateStickerCutSvg, downloadCutSvgBlob, generateRegistrationTemplateSvg } from '../export/svgCutGenerator';
 import { ZoomController } from '../preview/zoomController';
 import { createCalibrationPdf } from '../pdf/calibrationPage';
 import { renderPreviewSvg } from '../preview/previewRenderer';
@@ -704,8 +704,18 @@ export class UIController {
       await this.recalculateArtwork();
     });
 
+    const cutSvgMarksToggle = document.getElementById('cutSvgIncludeMarks') as HTMLInputElement;
+    cutSvgMarksToggle?.addEventListener('change', () => {
+      store.update({ cutSvgIncludeMarks: cutSvgMarksToggle.checked });
+    });
+
+    document.getElementById('btnDownloadTemplateSvg')?.addEventListener('click', () => {
+      this.handleDownloadTemplateSvg();
+    });
+
     bleedSelect?.addEventListener('change', () => {
       store.update({ bleedMm: parseInt(bleedSelect.value, 10) || 0 });
+      this.updateBleedGapWarning();
     });
 
     // 8. Кнопки экспорта (PDF, PNG и контур SVG)
@@ -1064,6 +1074,7 @@ export class UIController {
       shape: state.stickerShape,
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
+      includeMarksInSvg: Boolean(state.cutSvgIncludeMarks),
     });
 
     const formatName = state.paperFormatId.toLowerCase();
@@ -1080,6 +1091,16 @@ export class UIController {
         type: 'svg_cut_contour',
       },
     });
+  }
+
+  /**
+   * Скачивание калибровочного шаблона реперов для вычерчивания плоттерной ручкой на прозрачной пленке
+   */
+  private handleDownloadTemplateSvg() {
+    const pageDim = store.getPageDimensions();
+    const svgContent = generateRegistrationTemplateSvg(pageDim.widthMm, pageDim.heightMm, 8);
+    const filename = `stickers-registration-template-${pageDim.widthMm}x${pageDim.heightMm}mm.svg`;
+    downloadCutSvgBlob(svgContent, filename);
   }
 
   /**
@@ -1418,6 +1439,23 @@ export class UIController {
     this.syncShapeUi(shape);
     setVal('cornerRadius', formatUnitValue(state.cornerRadiusMm !== undefined ? state.cornerRadiusMm : 3, state.unit));
     setChecked('registrationMarksEnabled', Boolean(state.registrationMarks));
+    setChecked('cutSvgIncludeMarks', Boolean(state.cutSvgIncludeMarks));
+
+    // Обновление карточки калибровки меток и расстояний для проверки линейкой
+    const regMarksCard = document.getElementById('regMarksCalibrationCard');
+    const cutSvgMarksRow = document.getElementById('cutSvgMarksRow');
+    const regMarksDistText = document.getElementById('regMarksDistText');
+    const isReg = Boolean(state.registrationMarks);
+    if (regMarksCard) regMarksCard.style.display = isReg ? 'block' : 'none';
+    if (cutSvgMarksRow) cutSvgMarksRow.style.display = isReg ? 'block' : 'none';
+    if (regMarksDistText && isReg) {
+      const pageDim = store.getPageDimensions();
+      const distX = roundMm(pageDim.widthMm - 16, 1);
+      const distY = roundMm(pageDim.heightMm - 16, 1);
+      regMarksDistText.textContent = `${distX} мм (по длине) × ${distY} мм (по ширине)`;
+    }
+
+    this.updateBleedGapWarning(state);
 
     // Кнопка кадрирования доступна только если изображение загружено
     const btnCrop = document.getElementById('btnOpenCrop') as HTMLButtonElement;
@@ -1463,6 +1501,26 @@ export class UIController {
       if (lblStickerWidth) lblStickerWidth.textContent = t('lblWidthUnit', { unit: symbol });
       if (colStickerHeight) colStickerHeight.style.display = '';
       if (cornerRadiusGroup) cornerRadiusGroup.style.display = 'none';
+    }
+  }
+
+  /**
+   * Предупреждение о перекрытии зон вылетов при слишком малом зазоре между наклейками
+   */
+  private updateBleedGapWarning(s?: AppState) {
+    const state = s || store.getState();
+    const warningEl = document.getElementById('bleedGapWarning');
+    const warningTextEl = document.getElementById('bleedGapWarningText');
+    if (!warningEl) return;
+
+    const minGap = state.bleedMm * 2;
+    const isOverlap = state.bleedMm > 0 && (state.gapX < minGap || state.gapY < minGap);
+    warningEl.style.display = isOverlap ? 'block' : 'none';
+    if (warningTextEl && isOverlap) {
+      warningTextEl.textContent = t('warnBleedGapOverlap', {
+        bleed: state.bleedMm,
+        minGap,
+      });
     }
   }
 

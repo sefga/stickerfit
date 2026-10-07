@@ -78,4 +78,32 @@ describe('PDF Regression Test (§30 ТЗ)', () => {
     expect(width).toBeCloseTo(mmToPoints(297), 2);
     expect(height).toBeCloseTo(mmToPoints(210), 2);
   });
+
+  it('Корректно генерирует PDF для круглой формы с оптическими метками и вылетом Bleed', async () => {
+    const layout = calculateLayout({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 10, bottom: 10, left: 10, right: 10 },
+      gapX: 3,
+      gapY: 3,
+      allowRotation: false,
+    });
+
+    const pdfBytes = await generateStickerSheetPdf({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      layout,
+      stickerShape: 'circle',
+      bleedMm: 2,
+      registrationMarks: true,
+    });
+
+    expect(pdfBytes).toBeDefined();
+    expect(pdfBytes.length).toBeGreaterThan(0);
+
+    const loadedPdf = await PDFDocument.load(pdfBytes);
+    expect(loadedPdf.getPageCount()).toBe(1);
+  });
 });

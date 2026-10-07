@@ -35,6 +35,7 @@ export interface AppSettings {
   requestedCopies: number | 'AUTO';
   cutMarks: CutMarksConfig;
   registrationMarks: boolean;
+  cutSvgIncludeMarks: boolean;
   bleedMm: number;
   pngDpi: PngDpi;
 }
@@ -74,6 +75,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   requestedCopies: 'AUTO',
   cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG },
   registrationMarks: false,
+  cutSvgIncludeMarks: false,
   bleedMm: 0,
   pngDpi: 300,
 };
@@ -134,6 +136,7 @@ export function saveSettings(settings: AppSettings): void {
       requestedCopies: settings.requestedCopies,
       cutMarks: settings.cutMarks,
       registrationMarks: Boolean(settings.registrationMarks),
+      cutSvgIncludeMarks: Boolean(settings.cutSvgIncludeMarks),
       bleedMm: settings.bleedMm,
       pngDpi: settings.pngDpi || 300,
     };

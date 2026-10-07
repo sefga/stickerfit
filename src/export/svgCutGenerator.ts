@@ -8,6 +8,8 @@ export interface SvgCutOptions {
   shape?: StickerShape;
   cornerRadiusMm?: number;
   registrationMarks?: boolean;
+  /** Включать ли метки совмещения в файл контуров для плоттера (по умолчанию false, чтобы нож не резал мат) */
+  includeMarksInSvg?: boolean;
   strokeColor?: string;
   strokeWidthMm?: number;
 }
@@ -31,7 +33,7 @@ export function getRegistrationMarksPositions(pageWidthMm: number, pageHeightMm:
 
 /**
  * Программная генерация чистого векторного SVG в масштабе 1:1 для контурной плоттерной резки.
- * Полностью совместим с Cricut Design Space, Silhouette Studio, CorelDraw, Illustrator.
+ * Полностью совместим с Easy Cut Studio, Silhouette Studio, CorelDraw, Illustrator.
  */
 export function generateStickerCutSvg(options: SvgCutOptions): string {
   const {
@@ -41,6 +43,7 @@ export function generateStickerCutSvg(options: SvgCutOptions): string {
     shape = 'rect',
     cornerRadiusMm = 3,
     registrationMarks = false,
+    includeMarksInSvg = false,
     strokeColor = '#ff0000',
     strokeWidthMm = 0.1,
   } = options;
@@ -62,8 +65,14 @@ export function generateStickerCutSvg(options: SvgCutOptions): string {
     `  <desc>StickerFit 1:1 Vector Cut Paths: ${layout.positions.length} items (${shape})</desc>`
   );
 
-  // 3. Оптические метки совмещения плоттера (Registration Marks)
-  if (registrationMarks) {
+  // 3. Опорный габарит страницы для фиксации рабочей области листа в WYSIWYG режиме плоттерных программ
+  svgLines.push(
+    `  <!-- Page Boundary: фиксирует (0,0) и размер листа в Easy Cut Studio (WYSIWYG) -->`,
+    `  <rect id="PageBoundary" x="0" y="0" width="${pageWidthMm}" height="${pageHeightMm}" fill="none" stroke="none" pointer-events="none" />`
+  );
+
+  // 4. Оптические метки совмещения плоттера (добавляются в SVG только при явном флаге includeMarksInSvg)
+  if (registrationMarks && includeMarksInSvg) {
     const markPositions = getRegistrationMarksPositions(pageWidthMm, pageHeightMm, 8);
     const armLength = 4; // длина плеча креста (всего 8 мм)
     const targetRadius = 1.5;
@@ -79,13 +88,13 @@ export function generateStickerCutSvg(options: SvgCutOptions): string {
       // Центральная окружность прицела
       svgLines.push(`    <circle cx="${cx.toFixed(3)}" cy="${cy.toFixed(3)}" r="${targetRadius.toFixed(3)}" />`);
     }
-    // Маркер ориентации (квадрат в верхнем левом углу для однозначного определения верха листа оптическим датчиком)
+    // Маркер ориентации (квадрат в верхнем левом углу)
     const tl = markPositions[0];
     svgLines.push(`    <rect x="${(tl.cx - 1.5).toFixed(3)}" y="${(tl.cy - 1.5).toFixed(3)}" width="3" height="3" fill="#000000" stroke="none" />`);
     svgLines.push(`  </g>`);
   }
 
-  // 4. Группа векторных контуров резки (CutContour)
+  // 5. Группа векторных контуров резки (CutContour)
   svgLines.push(
     `  <g id="CutContour" stroke="${strokeColor}" stroke-width="${strokeWidthMm}" fill="none">`
   );
@@ -122,6 +131,40 @@ export function generateStickerCutSvg(options: SvgCutOptions): string {
   svgLines.push(`</svg>`);
 
   return svgLines.join('\n');
+}
+
+/**
+ * Генерация отдельного файла шаблона реперов (для вычерчивания плоттерной ручкой на прозрачной пленке)
+ */
+export function generateRegistrationTemplateSvg(pageWidthMm: number, pageHeightMm: number, offsetMm: number = 8): string {
+  const markPositions = getRegistrationMarksPositions(pageWidthMm, pageHeightMm, offsetMm);
+  const armLength = 4;
+  const targetRadius = 1.5;
+
+  const lines: string[] = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthMm}mm" height="${pageHeightMm}mm" viewBox="0 0 ${pageWidthMm} ${pageHeightMm}" version="1.1">`,
+    `  <!-- StickerFit Registration Template for Calibration Overlay -->`,
+    `  <rect id="PageBoundary" x="0" y="0" width="${pageWidthMm}" height="${pageHeightMm}" fill="none" stroke="#000000" stroke-width="0.1" stroke-dasharray="2,2" />`,
+    `  <g id="RegistrationMarks" stroke="#000000" stroke-width="0.25" fill="none">`,
+  ];
+
+  for (const mark of markPositions) {
+    lines.push(
+      `    <line x1="${(mark.cx - armLength).toFixed(3)}" y1="${mark.cy.toFixed(3)}" x2="${(mark.cx + armLength).toFixed(3)}" y2="${mark.cy.toFixed(3)}" />`,
+      `    <line x1="${mark.cx.toFixed(3)}" y1="${(mark.cy - armLength).toFixed(3)}" x2="${mark.cx.toFixed(3)}" y2="${(mark.cy + armLength).toFixed(3)}" />`,
+      `    <circle cx="${mark.cx.toFixed(3)}" cy="${mark.cy.toFixed(3)}" r="${targetRadius.toFixed(3)}" />`
+    );
+  }
+
+  const tl = markPositions[0];
+  lines.push(
+    `    <rect x="${(tl.cx - 1.5).toFixed(3)}" y="${(tl.cy - 1.5).toFixed(3)}" width="3" height="3" fill="#000000" stroke="none" />`,
+    `  </g>`,
+    `</svg>`
+  );
+
+  return lines.join('\n');
 }
 
 /**

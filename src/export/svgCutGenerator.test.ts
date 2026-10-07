@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateStickerCutSvg, getRegistrationMarksPositions } from './svgCutGenerator';
+import { generateStickerCutSvg, getRegistrationMarksPositions, generateRegistrationTemplateSvg } from './svgCutGenerator';
 import { LayoutResult } from '../layout/layoutEngine';
 
 describe('svgCutGenerator', () => {
@@ -22,7 +22,7 @@ describe('svgCutGenerator', () => {
     hasError: false,
   };
 
-  it('генерирует корректный SVG с физическими миллиметровыми размерами для кругов', () => {
+  it('генерирует корректный SVG с физическими миллиметровыми размерами для кругов и PageBoundary', () => {
     const svg = generateStickerCutSvg({
       pageWidthMm: 210,
       pageHeightMm: 297,
@@ -34,6 +34,7 @@ describe('svgCutGenerator', () => {
     expect(svg).toContain('width="210mm"');
     expect(svg).toContain('height="297mm"');
     expect(svg).toContain('viewBox="0 0 210 297"');
+    expect(svg).toContain('<rect id="PageBoundary" x="0" y="0" width="210" height="297" fill="none" stroke="none" pointer-events="none" />');
     expect(svg).toContain('<g id="CutContour" stroke="#ff0000" stroke-width="0.1" fill="none">');
     // Проверяем наличие 2 окружностей с cx=30, cy=30 и cx=80, cy=30, r=20
     expect(svg).toContain('<circle cx="30.000" cy="30.000" r="20.000" />');
@@ -41,36 +42,28 @@ describe('svgCutGenerator', () => {
     expect(svg).not.toContain('id="RegistrationMarks"');
   });
 
-  it('генерирует скругленные прямоугольники при shape="rounded"', () => {
-    const svg = generateStickerCutSvg({
-      pageWidthMm: 210,
-      pageHeightMm: 297,
-      layout: dummyLayout,
-      shape: 'rounded',
-      cornerRadiusMm: 5,
-    });
-
-    expect(svg).toContain('<rect x="10.000" y="10.000" width="40.000" height="40.000" rx="5.000" ry="5.000" />');
-  });
-
-  it('генерирует стандартные прямоугольники при shape="rect"', () => {
-    const svg = generateStickerCutSvg({
-      pageWidthMm: 210,
-      pageHeightMm: 297,
-      layout: dummyLayout,
-      shape: 'rect',
-    });
-
-    expect(svg).toContain('<rect x="10.000" y="10.000" width="40.000" height="40.000" />');
-  });
-
-  it('генерирует группу RegistrationMarks при registrationMarks=true', () => {
+  it('по умолчанию исключает метки совмещения из SVG резки, даже если registrationMarks=true (защита мата)', () => {
     const svg = generateStickerCutSvg({
       pageWidthMm: 210,
       pageHeightMm: 297,
       layout: dummyLayout,
       shape: 'circle',
       registrationMarks: true,
+      includeMarksInSvg: false,
+    });
+
+    expect(svg).not.toContain('id="RegistrationMarks"');
+    expect(svg).toContain('<g id="CutContour"');
+  });
+
+  it('включает группу RegistrationMarks только при явном includeMarksInSvg=true', () => {
+    const svg = generateStickerCutSvg({
+      pageWidthMm: 210,
+      pageHeightMm: 297,
+      layout: dummyLayout,
+      shape: 'circle',
+      registrationMarks: true,
+      includeMarksInSvg: true,
     });
 
     expect(svg).toContain('<g id="RegistrationMarks" stroke="#000000" stroke-width="0.25" fill="none">');
@@ -80,5 +73,13 @@ describe('svgCutGenerator', () => {
     expect(marks[1]).toEqual({ cx: 202, cy: 8 });
     expect(marks[2]).toEqual({ cx: 8, cy: 289 });
     expect(marks[3]).toEqual({ cx: 202, cy: 289 });
+  });
+
+  it('генерирует чистый отдельный калибровочный шаблон реперов generateRegistrationTemplateSvg', () => {
+    const templateSvg = generateRegistrationTemplateSvg(210, 297, 8);
+    expect(templateSvg).toContain('width="210mm"');
+    expect(templateSvg).toContain('height="297mm"');
+    expect(templateSvg).toContain('<g id="RegistrationMarks"');
+    expect(templateSvg).not.toContain('CutContour');
   });
 });

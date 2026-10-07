@@ -19,6 +19,95 @@ export interface PdfExportOptions {
 }
 
 /**
+ * Преобразование растрового изображения стикера в маскированный PNG с альфа-каналом по форме (круг/скругление)
+ * с учетом вылета Bleed. Обеспечивает честную форму в PDF без квадратных кромок.
+ */
+async function createMaskedStickerPng(
+  imageBytes: Uint8Array,
+  imageMimeType: string | undefined,
+  shape: StickerShape,
+  cornerRadiusMm: number,
+  bleedMm: number,
+  stickerWidthMm: number,
+  stickerHeightMm: number
+): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+    return { bytes: imageBytes, mimeType: imageMimeType || 'image/png' };
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const blob = new Blob([imageBytes as any], { type: imageMimeType || 'image/png' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const naturalW = img.naturalWidth || 500;
+        const naturalH = img.naturalHeight || 500;
+
+        const totalWMm = stickerWidthMm + bleedMm * 2;
+        const totalHMm = stickerHeightMm + bleedMm * 2;
+        const scaleFactorX = totalWMm / Math.max(0.1, stickerWidthMm);
+        const scaleFactorY = totalHMm / Math.max(0.1, stickerHeightMm);
+
+        const canvasW = Math.round(naturalW * scaleFactorX);
+        const canvasH = Math.round(naturalH * scaleFactorY);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+        const ctx = canvas.getContext('2d', { alpha: true });
+        if (!ctx) {
+          resolve({ bytes: imageBytes, mimeType: imageMimeType || 'image/png' });
+          return;
+        }
+
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        ctx.save();
+
+        if (shape === 'circle') {
+          ctx.beginPath();
+          const radius = Math.min(canvasW, canvasH) / 2;
+          ctx.arc(canvasW / 2, canvasH / 2, radius, 0, Math.PI * 2);
+          ctx.clip();
+        } else if (shape === 'rounded') {
+          ctx.beginPath();
+          const rPx = Math.min(canvasW / 2, canvasH / 2, Math.max(0, (cornerRadiusMm + bleedMm) * (canvasW / totalWMm)));
+          if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(0, 0, canvasW, canvasH, rPx);
+          } else {
+            ctx.rect(0, 0, canvasW, canvasH);
+          }
+          ctx.clip();
+        }
+
+        ctx.drawImage(img, 0, 0, canvasW, canvasH);
+        ctx.restore();
+
+        canvas.toBlob(async (pngBlob) => {
+          if (!pngBlob) {
+            resolve({ bytes: imageBytes, mimeType: imageMimeType || 'image/png' });
+            return;
+          }
+          const arrayBuf = await pngBlob.arrayBuffer();
+          resolve({ bytes: new Uint8Array(arrayBuf), mimeType: 'image/png' });
+        }, 'image/png');
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve({ bytes: imageBytes, mimeType: imageMimeType || 'image/png' });
+      };
+
+      img.src = url;
+    } catch {
+      resolve({ bytes: imageBytes, mimeType: imageMimeType || 'image/png' });
+    }
+  });
+}
+
+/**
  * Программная генерация PDF A4 с точными физическими размерами в миллиметрах
  */
 export async function generateStickerSheetPdf(options: PdfExportOptions): Promise<Uint8Array> {
@@ -30,6 +119,8 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
     imageMimeType,
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
+    stickerShape = 'rect',
+    cornerRadiusMm = 3,
     registrationMarks = false,
   } = options;
 
@@ -44,11 +135,29 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
   // Если передано изображение, декодируем и встраиваем его в PDF ровно ОДИН раз
   let embeddedImage: any = null;
   if (imageBytes && imageBytes.length > 0) {
-    const isJpeg = imageMimeType?.includes('jpeg') || imageMimeType?.includes('jpg');
+    let finalBytes = imageBytes;
+    let finalMime = imageMimeType;
+
+    if (stickerShape === 'circle' || stickerShape === 'rounded') {
+      const firstPos = layout.positions[0] || { widthMm: 50, heightMm: 50 };
+      const masked = await createMaskedStickerPng(
+        imageBytes,
+        imageMimeType,
+        stickerShape,
+        cornerRadiusMm,
+        bleedMm,
+        firstPos.widthMm,
+        firstPos.heightMm
+      );
+      finalBytes = masked.bytes;
+      finalMime = masked.mimeType;
+    }
+
+    const isJpeg = finalMime?.includes('jpeg') || finalMime?.includes('jpg');
     if (isJpeg) {
-      embeddedImage = await pdfDoc.embedJpg(imageBytes);
+      embeddedImage = await pdfDoc.embedJpg(finalBytes);
     } else {
-      embeddedImage = await pdfDoc.embedPng(imageBytes);
+      embeddedImage = await pdfDoc.embedPng(finalBytes);
     }
   }
 
