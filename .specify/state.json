@@ -1,20 +1,18 @@
 {
   "active": true,
-  "taskScope": "Устранение расхождений резки и печати: круглая/скругленная маска в PDF, вылеты без искажения масштаба ядра, исключение резки реперов в SVG по умолчанию, фиксация габаритов А4 для WYSIWYG, отображение калибровочных расстояний меток и валидация зазоров Bleed",
+  "taskScope": "Включение внешней рамки листа (Sheet Cut Frame / Page Border) в SVG экспорт контура резки для точной фиксации начала координат (0,0) по физическому углу листа А4 в плоттерных программах (Easy Cut Studio) и расчет параметров для круга 35.4 мм",
   "phase": "VERIFIED",
   "allowedFiles": [
-    "src/pdf/pdfGenerator.ts",
-    "src/pdf/pdfGenerator.test.ts",
     "src/export/svgCutGenerator.ts",
     "src/export/svgCutGenerator.test.ts",
     "src/state.ts",
     "src/ui/controls.ts",
     "src/i18n.ts",
     "index.html",
-    "specs/003-plotter-cut-precision/spec.md",
-    "specs/003-plotter-cut-precision/plan.md",
-    "specs/003-plotter-cut-precision/checklists/requirements.md",
-    "specs/003-plotter-cut-precision/tasks.md",
+    "specs/004-plotter-sheet-cut-frame/spec.md",
+    "specs/004-plotter-sheet-cut-frame/plan.md",
+    "specs/004-plotter-sheet-cut-frame/checklists/requirements.md",
+    "specs/004-plotter-sheet-cut-frame/tasks.md",
     ".specify/state.json"
   ],
   "verificationRequired": [
@@ -22,7 +20,7 @@
     "npm run build"
   ],
   "verificationEvidence": {
-    "test": "15 test files passed, 119 tests passed, exit code 0",
+    "test": "15 test files passed, 120 tests passed, exit code 0",
     "build": "tsc && vite build exit code 0, 210 modules transformed"
   },
   "tasksCompleted": 8,

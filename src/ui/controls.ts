@@ -709,6 +709,11 @@ export class UIController {
       store.update({ cutSvgIncludeMarks: cutSvgMarksToggle.checked });
     });
 
+    const cutSvgSheetBorderToggle = document.getElementById('cutSvgIncludeSheetBorder') as HTMLInputElement;
+    cutSvgSheetBorderToggle?.addEventListener('change', () => {
+      store.update({ cutSvgIncludeSheetBorder: cutSvgSheetBorderToggle.checked });
+    });
+
     document.getElementById('btnDownloadTemplateSvg')?.addEventListener('click', () => {
       this.handleDownloadTemplateSvg();
     });
@@ -1075,6 +1080,7 @@ export class UIController {
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
       includeMarksInSvg: Boolean(state.cutSvgIncludeMarks),
+      includeSheetBorder: state.cutSvgIncludeSheetBorder !== undefined ? Boolean(state.cutSvgIncludeSheetBorder) : true,
     });
 
     const formatName = state.paperFormatId.toLowerCase();
@@ -1440,6 +1446,7 @@ export class UIController {
     setVal('cornerRadius', formatUnitValue(state.cornerRadiusMm !== undefined ? state.cornerRadiusMm : 3, state.unit));
     setChecked('registrationMarksEnabled', Boolean(state.registrationMarks));
     setChecked('cutSvgIncludeMarks', Boolean(state.cutSvgIncludeMarks));
+    setChecked('cutSvgIncludeSheetBorder', state.cutSvgIncludeSheetBorder !== undefined ? Boolean(state.cutSvgIncludeSheetBorder) : true);
 
     // Обновление карточки калибровки меток и расстояний для проверки линейкой
     const regMarksCard = document.getElementById('regMarksCalibrationCard');

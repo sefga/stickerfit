@@ -36,6 +36,7 @@ export interface AppSettings {
   cutMarks: CutMarksConfig;
   registrationMarks: boolean;
   cutSvgIncludeMarks: boolean;
+  cutSvgIncludeSheetBorder: boolean;
   bleedMm: number;
   pngDpi: PngDpi;
 }
@@ -76,6 +77,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG },
   registrationMarks: false,
   cutSvgIncludeMarks: false,
+  cutSvgIncludeSheetBorder: true,
   bleedMm: 0,
   pngDpi: 300,
 };
@@ -137,6 +139,7 @@ export function saveSettings(settings: AppSettings): void {
       cutMarks: settings.cutMarks,
       registrationMarks: Boolean(settings.registrationMarks),
       cutSvgIncludeMarks: Boolean(settings.cutSvgIncludeMarks),
+      cutSvgIncludeSheetBorder: settings.cutSvgIncludeSheetBorder !== undefined ? Boolean(settings.cutSvgIncludeSheetBorder) : true,
       bleedMm: settings.bleedMm,
       pngDpi: settings.pngDpi || 300,
     };

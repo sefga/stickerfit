@@ -10,6 +10,8 @@ export interface SvgCutOptions {
   registrationMarks?: boolean;
   /** Включать ли метки совмещения в файл контуров для плоттера (по умолчанию false, чтобы нож не резал мат) */
   includeMarksInSvg?: boolean;
+  /** Включать ли внешнюю рамку листа в контур резки (по умолчанию true, для фиксации начала координат (0,0) по углу листа) */
+  includeSheetBorder?: boolean;
   strokeColor?: string;
   strokeWidthMm?: number;
 }
@@ -44,6 +46,7 @@ export function generateStickerCutSvg(options: SvgCutOptions): string {
     cornerRadiusMm = 3,
     registrationMarks = false,
     includeMarksInSvg = false,
+    includeSheetBorder = true,
     strokeColor = '#ff0000',
     strokeWidthMm = 0.1,
   } = options;
@@ -99,6 +102,14 @@ export function generateStickerCutSvg(options: SvgCutOptions): string {
     `  <g id="CutContour" stroke="${strokeColor}" stroke-width="${strokeWidthMm}" fill="none">`
   );
 
+  // 5.1. Внешний контур реза листа (SheetBorder) для позиционирования начала координат (0,0) по углу листа
+  if (includeSheetBorder) {
+    svgLines.push(
+      `    <!-- Sheet Border: задает размер листа и фиксирует точку (0,0) в плоттерных программах -->`,
+      `    <rect id="SheetBorder" x="0" y="0" width="${pageWidthMm.toFixed(3)}" height="${pageHeightMm.toFixed(3)}" />`
+    );
+  }
+
   for (const pos of layout.positions) {
     const { xMm, yMm, widthMm, heightMm } = pos;
 
@@ -145,7 +156,7 @@ export function generateRegistrationTemplateSvg(pageWidthMm: number, pageHeightM
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthMm}mm" height="${pageHeightMm}mm" viewBox="0 0 ${pageWidthMm} ${pageHeightMm}" version="1.1">`,
     `  <!-- StickerFit Registration Template for Calibration Overlay -->`,
-    `  <rect id="PageBoundary" x="0" y="0" width="${pageWidthMm}" height="${pageHeightMm}" fill="none" stroke="#000000" stroke-width="0.1" stroke-dasharray="2,2" />`,
+    `  <rect id="SheetBorder" x="0" y="0" width="${pageWidthMm}" height="${pageHeightMm}" fill="none" stroke="#000000" stroke-width="0.25" />`,
     `  <g id="RegistrationMarks" stroke="#000000" stroke-width="0.25" fill="none">`,
   ];
 

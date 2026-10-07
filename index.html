@@ -510,6 +510,17 @@
             </div>
           </div>
 
+          <!-- Опция резки внешней рамки листа в SVG (по умолчанию включена для фиксации 0,0) -->
+          <div id="cutSvgSheetBorderRow" style="margin-top: 8px;">
+            <label class="checkbox-label" style="font-size: 12px;">
+              <input type="checkbox" id="cutSvgIncludeSheetBorder" checked />
+              <span data-i18n="lblCutSvgIncludeSheetBorder">Включать рамку листа в файл резки (SVG)</span>
+            </label>
+            <div class="field-hint" data-i18n="hintCutSvgIncludeSheetBorder" style="margin-top: 1px;">
+              Включает внешний контур листа для точной привязки (0,0) по углу листа А4 в Easy Cut Studio.
+            </div>
+          </div>
+
           <!-- Предупреждение о перекрытии вылетов при слишком малом зазоре -->
           <div id="bleedGapWarning" class="alert-warning" style="display: none; margin-top: 8px; font-size: 11px; padding: 6px 10px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; color: #92400e;">
             ⚠️ <span id="bleedGapWarningText">При вылете Bleed 2 мм рекомендуемый зазор — от 4 мм, чтобы вылеты соседних стикеров не перекрывались.</span>
