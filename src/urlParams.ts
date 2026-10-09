@@ -222,6 +222,16 @@ export function parseUrlSettings(queryString: string): Partial<AppSettings> {
     patch.bleedMm = bleed;
   }
 
+  // 8.1 Цвет вылета под обрез (bleedColor)
+  for (const key of ['bleedColor', 'bleedCol', 'colorBleed']) {
+    const raw = params.get(key);
+    if (raw) {
+      const formatted = raw.startsWith('#') ? raw : `#${raw}`;
+      patch.bleedColor = formatted;
+      break;
+    }
+  }
+
   // 9. Форма стикера (shape: rect | circle | rounded)
   for (const key of ['shape', 'stickerShape', 'form']) {
     const raw = params.get(key);

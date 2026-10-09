@@ -5,6 +5,7 @@ import { LoadedImage } from './image/imageLoader';
 import { parseUrlSettings } from './urlParams';
 import { Unit } from './units/units';
 import { calculatePageDimensions, DEFAULT_PAPER_FORMAT_ID } from './units/paperFormats';
+import { isValidHexColor, normalizeHexColor } from './layout/bleedGeometry';
 
 export type PageOrientation = 'portrait' | 'landscape';
 
@@ -38,6 +39,7 @@ export interface AppSettings {
   cutSvgIncludeMarks: boolean;
   cutSvgIncludeSheetBorder: boolean;
   bleedMm: number;
+  bleedColor: string;
   pngDpi: PngDpi;
 }
 
@@ -79,6 +81,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cutSvgIncludeMarks: false,
   cutSvgIncludeSheetBorder: true,
   bleedMm: 0,
+  bleedColor: '#FFFFFF',
   pngDpi: 300,
 };
 
@@ -88,9 +91,14 @@ function loadSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const bleedColor = typeof parsed.bleedColor === 'string' && isValidHexColor(parsed.bleedColor)
+        ? normalizeHexColor(parsed.bleedColor)
+        : DEFAULT_SETTINGS.bleedColor;
+
       settings = {
         ...DEFAULT_SETTINGS,
         ...parsed,
+        bleedColor,
         margins: { ...DEFAULT_SETTINGS.margins, ...(parsed.margins || {}) },
         cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG, ...(parsed.cutMarks || {}) },
       };
@@ -102,9 +110,14 @@ function loadSettings(): AppSettings {
   // Применяем параметры из адресной строки (Smart Deeplinks от ChatGPT/поиска), если они переданы
   if (typeof window !== 'undefined' && window.location?.search) {
     const urlOverrides = parseUrlSettings(window.location.search);
+    const urlBleedColor = urlOverrides.bleedColor && isValidHexColor(urlOverrides.bleedColor)
+      ? normalizeHexColor(urlOverrides.bleedColor)
+      : undefined;
+
     settings = {
       ...settings,
       ...urlOverrides,
+      ...(urlBleedColor ? { bleedColor: urlBleedColor } : {}),
       margins: { ...settings.margins, ...(urlOverrides.margins || {}) },
       cutMarks: { ...settings.cutMarks, ...(urlOverrides.cutMarks || {}) },
     };
@@ -141,6 +154,7 @@ export function saveSettings(settings: AppSettings): void {
       cutSvgIncludeMarks: Boolean(settings.cutSvgIncludeMarks),
       cutSvgIncludeSheetBorder: settings.cutSvgIncludeSheetBorder !== undefined ? Boolean(settings.cutSvgIncludeSheetBorder) : true,
       bleedMm: settings.bleedMm,
+      bleedColor: normalizeHexColor(settings.bleedColor || '#FFFFFF'),
       pngDpi: settings.pngDpi || 300,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));

@@ -106,4 +106,34 @@ describe('PDF Regression Test (§30 ТЗ)', () => {
     const loadedPdf = await PDFDocument.load(pdfBytes);
     expect(loadedPdf.getPageCount()).toBe(1);
   });
+
+  it('Корректно генерирует векторный PDF с цветным вылетом под обрез (bleedColor)', async () => {
+    const layout = calculateLayout({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 5, bottom: 5, left: 5, right: 5 },
+      gapX: 2,
+      gapY: 2,
+      allowRotation: false,
+      bleedMm: 1,
+    });
+
+    const pdfBytes = await generateStickerSheetPdf({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      layout,
+      bleedMm: 1,
+      bleedColor: '#3B82F6',
+      stickerShape: 'rounded',
+      cornerRadiusMm: 4,
+    });
+
+    expect(pdfBytes).toBeDefined();
+    expect(pdfBytes.length).toBeGreaterThan(0);
+
+    const loadedPdf = await PDFDocument.load(pdfBytes);
+    expect(loadedPdf.getPageCount()).toBe(1);
+  });
 });

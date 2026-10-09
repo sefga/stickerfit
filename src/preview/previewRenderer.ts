@@ -4,6 +4,7 @@ import { Margins } from '../layout/layoutEngine';
 import { SizingMode } from '../image/cropEngine';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
+import { getBleedDifferenceSvgPath, normalizeHexColor } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PreviewOptions {
@@ -15,6 +16,7 @@ export interface PreviewOptions {
   sizingMode?: SizingMode;
   cutMarksConfig: CutMarksConfig;
   bleedMm?: number;
+  bleedColor?: string;
   stickerShape?: StickerShape;
   cornerRadiusMm?: number;
   registrationMarks?: boolean;
@@ -34,6 +36,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     sizingMode = 'fill',
     cutMarksConfig,
     bleedMm = 0,
+    bleedColor = '#FFFFFF',
     stickerShape = 'rect',
     cornerRadiusMm = 3,
     registrationMarks = false,
@@ -139,33 +142,22 @@ export function renderPreviewSvg(options: PreviewOptions): string {
   visiblePositions.forEach((pos, idx) => {
     const { xMm, yMm, widthMm, heightMm } = pos;
 
-    // Зона Bleed (если включен)
+    // FR-008: Внешний цветной вылет под обрез реальным цветом bleedColor
     if (bleedMm > 0) {
-      if (stickerShape === 'circle') {
-        const d = Math.min(widthMm, heightMm);
-        const rBleed = d / 2 + bleedMm;
+      const color = normalizeHexColor(bleedColor);
+      const bleedPath = getBleedDifferenceSvgPath({
+        xMm,
+        yMm,
+        widthMm,
+        heightMm,
+        bleedMm,
+        shape: stickerShape,
+        cornerRadiusMm: clampedRadius,
+      });
+
+      if (bleedPath) {
         svgParts.push(
-          `<circle cx="${xMm + widthMm / 2}" cy="${yMm + heightMm / 2}" r="${rBleed}" ` +
-          `fill="#fef3c7" fill-opacity="0.6" stroke="#f59e0b" stroke-width="0.15" stroke-dasharray="0.8,0.8" />`
-        );
-      } else if (stickerShape === 'rounded') {
-        const bX = xMm - bleedMm;
-        const bY = yMm - bleedMm;
-        const bW = widthMm + bleedMm * 2;
-        const bH = heightMm + bleedMm * 2;
-        const rBleed = clampedRadius + bleedMm;
-        svgParts.push(
-          `<rect x="${bX}" y="${bY}" width="${bW}" height="${bH}" rx="${rBleed}" ry="${rBleed}" ` +
-          `fill="#fef3c7" fill-opacity="0.6" stroke="#f59e0b" stroke-width="0.15" stroke-dasharray="0.8,0.8" />`
-        );
-      } else {
-        const bX = xMm - bleedMm;
-        const bY = yMm - bleedMm;
-        const bW = widthMm + bleedMm * 2;
-        const bH = heightMm + bleedMm * 2;
-        svgParts.push(
-          `<rect x="${bX}" y="${bY}" width="${bW}" height="${bH}" ` +
-          `fill="#fef3c7" fill-opacity="0.6" stroke="#f59e0b" stroke-width="0.15" stroke-dasharray="0.8,0.8" />`
+          `<path d="${bleedPath}" fill="${color}" fill-rule="evenodd" stroke="#cbd5e1" stroke-width="0.12" />`
         );
       }
     }

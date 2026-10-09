@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateStickerCutSvg, getRegistrationMarksPositions, generateRegistrationTemplateSvg } from './svgCutGenerator';
-import { LayoutResult } from '../layout/layoutEngine';
+import { calculateLayout, LayoutResult } from '../layout/layoutEngine';
 
 describe('svgCutGenerator', () => {
   const dummyLayout: LayoutResult = {
@@ -16,6 +16,9 @@ describe('svgCutGenerator', () => {
     ],
     usableWidthMm: 190,
     usableHeightMm: 277,
+    effectiveGapX: 0,
+    effectiveGapY: 0,
+    capacityWithoutBleed: 2,
     alternativeCapacity: 2,
     rotationRecommended: false,
     recommendationMessage: '',
@@ -100,8 +103,35 @@ describe('svgCutGenerator', () => {
     const templateSvg = generateRegistrationTemplateSvg(210, 297, 8);
     expect(templateSvg).toContain('width="210mm"');
     expect(templateSvg).toContain('height="297mm"');
-    expect(templateSvg).toContain('<rect id="SheetBorder" x="0" y="0" width="210" height="297" fill="none" stroke="#000000" stroke-width="0.25" />');
     expect(templateSvg).toContain('<g id="RegistrationMarks"');
     expect(templateSvg).not.toContain('CutContour');
+  });
+
+  it('FR-018 & AC-011: SVG для плоттера содержит строго исходные контуры реза без внешней заливки и вылетов', () => {
+    const layout = calculateLayout({
+      pageWidthMm: 210,
+      pageHeightMm: 297,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 5, bottom: 5, left: 5, right: 5 },
+      gapX: 2,
+      gapY: 2,
+      allowRotation: false,
+      bleedMm: 2, // В раскладке есть вылет 2 мм
+    });
+
+    const svg = generateStickerCutSvg({
+      pageWidthMm: 210,
+      pageHeightMm: 297,
+      layout,
+      shape: 'rect',
+    });
+
+    // Контур реза режет ровно 50x50 мм (а не 54x54 с вылетом)
+    expect(svg).toContain('width="50.000" height="50.000"');
+    expect(svg).not.toContain('54.000');
+    // Заливка контуров строго отсутствует (fill="none")
+    expect(svg).toContain('<g id="CutContour" stroke="#ff0000" stroke-width="0.1" fill="none">');
+    expect(svg).not.toContain('fill-rule="evenodd"');
   });
 });

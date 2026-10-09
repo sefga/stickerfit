@@ -21,6 +21,8 @@ import {
   calculateHeightFromWidth,
   calculateWidthFromHeight,
 } from '../image/aspectRatio';
+import { EyedropperModal } from './eyedropper';
+import { isValidHexColor, normalizeHexColor } from '../layout/bleedGeometry';
 
 export class UIController {
   private currentLayout: LayoutResult | null = null;
@@ -488,14 +490,15 @@ export class UIController {
       const state = store.getState();
       const fmt = getPaperFormat(state.paperFormatId);
       const rollW = fmt.widthMm;
-      const usableW = Math.max(10, rollW - state.margins.left - state.margins.right);
+      const b = state.bleedMm || 0;
+      const effGapX = Math.max(state.gapX, 2 * b);
+      const effGapY = Math.max(state.gapY, 2 * b);
+      const usableW = Math.max(10, rollW - state.margins.left - state.margins.right - 2 * b);
       const stW = state.stickerWidthMm;
       const stH = state.stickerHeightMm;
-      const gapX = state.gapX;
-      const gapY = state.gapY;
 
       // Число колонок
-      const cols = Math.max(1, Math.floor((usableW + gapX) / (stW + gapX)));
+      const cols = Math.max(1, Math.floor((usableW + effGapX) / (stW + effGapX)));
       let targetCopies = 1;
       if (typeof state.requestedCopies === 'number' && state.requestedCopies > 0) {
         targetCopies = state.requestedCopies;
@@ -504,7 +507,7 @@ export class UIController {
       }
 
       const rows = Math.max(1, Math.ceil(targetCopies / cols));
-      const requiredH = roundMm(state.margins.top + rows * stH + (rows - 1) * gapY + state.margins.bottom);
+      const requiredH = roundMm(state.margins.top + 2 * b + rows * stH + (rows - 1) * effGapY + state.margins.bottom);
       const finalH = Math.max(30, Math.min(3000, requiredH));
 
       store.update({ rollLengthMm: finalH });
@@ -721,6 +724,80 @@ export class UIController {
     bleedSelect?.addEventListener('change', () => {
       store.update({ bleedMm: parseInt(bleedSelect.value, 10) || 0 });
       this.updateBleedGapWarning();
+    });
+
+    const bleedColorPicker = document.getElementById('bleedColorPicker') as HTMLInputElement;
+    const bleedColorHex = document.getElementById('bleedColorHex') as HTMLInputElement;
+    const btnBleedEyedropper = document.getElementById('btnBleedEyedropper') as HTMLButtonElement;
+
+    bleedColorPicker?.addEventListener('input', () => {
+      const hex = normalizeHexColor(bleedColorPicker.value);
+      if (bleedColorHex) bleedColorHex.value = hex;
+      store.update({ bleedColor: hex });
+    });
+
+    bleedColorHex?.addEventListener('input', () => {
+      let val = bleedColorHex.value.trim();
+      if (!val.startsWith('#') && val.length > 0) {
+        val = '#' + val;
+      }
+      if (isValidHexColor(val)) {
+        const hex = normalizeHexColor(val);
+        if (bleedColorPicker) bleedColorPicker.value = hex;
+        store.update({ bleedColor: hex });
+      }
+    });
+
+    bleedColorHex?.addEventListener('blur', () => {
+      const current = store.getState().bleedColor || '#FFFFFF';
+      let val = bleedColorHex.value.trim();
+      if (!val.startsWith('#') && val.length > 0) {
+        val = '#' + val;
+      }
+      if (isValidHexColor(val)) {
+        const hex = normalizeHexColor(val);
+        bleedColorHex.value = hex;
+        if (bleedColorPicker) bleedColorPicker.value = hex;
+        store.update({ bleedColor: hex });
+      } else {
+        bleedColorHex.value = current;
+        if (bleedColorPicker) bleedColorPicker.value = current;
+      }
+    });
+
+    btnBleedEyedropper?.addEventListener('click', async () => {
+      const state = store.getState();
+      if (!state.loadedImage) {
+        alert(t('alertNoImage'));
+        return;
+      }
+
+      let sourceImg: HTMLImageElement | HTMLCanvasElement = state.loadedImage.imageElement;
+      if (state.croppedResult?.dataUrl) {
+        const tempImg = new Image();
+        tempImg.src = state.croppedResult.dataUrl;
+        if (!tempImg.complete || tempImg.naturalWidth === 0) {
+          await new Promise<void>((resolve) => {
+            tempImg.onload = () => resolve();
+            tempImg.onerror = () => resolve();
+          });
+        }
+        if (tempImg.naturalWidth > 0) {
+          sourceImg = tempImg;
+        }
+      }
+
+      const modal = new EyedropperModal({
+        sourceImage: sourceImg,
+        initialColor: state.bleedColor || '#FFFFFF',
+        onSelect: (selectedHex) => {
+          const hex = normalizeHexColor(selectedHex);
+          if (bleedColorPicker) bleedColorPicker.value = hex;
+          if (bleedColorHex) bleedColorHex.value = hex;
+          store.update({ bleedColor: hex });
+        },
+      });
+      modal.open();
     });
 
     // 8. Кнопки экспорта (PDF, PNG и контур SVG)
@@ -951,6 +1028,7 @@ export class UIController {
           allowRotation: currentState.allowRotation,
           requestedCopies: currentState.requestedCopies,
           spacingMode: currentState.spacingMode,
+          bleedMm: currentState.bleedMm,
         });
 
         const sheetRotation = layout.selectedRotation;
@@ -1020,8 +1098,8 @@ export class UIController {
    * Экспорт PDF для скачивания
    */
   private async handleDownloadPdf() {
-    if (!this.currentLayout || this.currentLayout.positions.length === 0) {
-      alert(t('alertNoStickers'));
+    if (!this.currentLayout || this.currentLayout.hasError || this.currentLayout.positions.length === 0) {
+      alert(this.currentLayout?.hasError ? t('errBleedTooLarge') : t('alertNoStickers'));
       return;
     }
 
@@ -1036,6 +1114,7 @@ export class UIController {
       imageMimeType: state.croppedResult?.mimeType,
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
+      bleedColor: state.bleedColor,
       stickerShape: state.stickerShape,
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
@@ -1064,8 +1143,8 @@ export class UIController {
    * Экспорт чистого векторного 1:1 SVG контура для плоттерной резки
    */
   private handleDownloadCutSvg() {
-    if (!this.currentLayout || this.currentLayout.positions.length === 0) {
-      alert(t('alertNoStickers'));
+    if (!this.currentLayout || this.currentLayout.hasError || this.currentLayout.positions.length === 0) {
+      alert(this.currentLayout?.hasError ? t('errBleedTooLarge') : t('alertNoStickers'));
       return;
     }
 
@@ -1113,8 +1192,8 @@ export class UIController {
    * Экспорт листа в формате PNG высокого качества (выбранный DPI: 150 / 300 / 600)
    */
   private async handleDownloadPng() {
-    if (!this.currentLayout || this.currentLayout.positions.length === 0) {
-      alert(t('alertNoStickers'));
+    if (!this.currentLayout || this.currentLayout.hasError || this.currentLayout.positions.length === 0) {
+      alert(this.currentLayout?.hasError ? t('errBleedTooLarge') : t('alertNoStickers'));
       return;
     }
 
@@ -1130,6 +1209,7 @@ export class UIController {
         imageDataUrl: state.croppedResult?.dataUrl || null,
         cutMarks: state.cutMarks,
         bleedMm: state.bleedMm,
+        bleedColor: state.bleedColor,
         dpi,
         stickerShape: state.stickerShape,
         cornerRadiusMm: state.cornerRadiusMm,
@@ -1184,8 +1264,8 @@ export class UIController {
    * Печать PDF с выводом предупреждения о масштабе 100%
    */
   private async handlePrintPdf() {
-    if (!this.currentLayout || this.currentLayout.positions.length === 0) {
-      alert(t('alertNoStickers'));
+    if (!this.currentLayout || this.currentLayout.hasError || this.currentLayout.positions.length === 0) {
+      alert(this.currentLayout?.hasError ? t('errBleedTooLarge') : t('alertNoStickers'));
       return;
     }
 
@@ -1200,6 +1280,7 @@ export class UIController {
       imageMimeType: state.croppedResult?.mimeType,
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
+      bleedColor: state.bleedColor,
       stickerShape: state.stickerShape,
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
@@ -1247,6 +1328,7 @@ export class UIController {
       allowRotation: state.allowRotation,
       requestedCopies: state.requestedCopies,
       spacingMode: state.spacingMode,
+      bleedMm: state.bleedMm,
     });
 
     // 2. Синхронизация полей ввода
@@ -1261,7 +1343,10 @@ export class UIController {
     // 5. Предупреждение о printable area (<3 мм)
     this.updatePrintableAreaWarning(state);
 
-    // 6. Отрисовка Live Preview (векторный SVG в миллиметрах с адаптивным CSS aspect-ratio)
+    // 6. Блокировка/разблокировка кнопок экспорта при невозможности размещения
+    this.updateExportButtonsState(this.currentLayout);
+
+    // 7. Отрисовка Live Preview (векторный SVG в миллиметрах с адаптивным CSS aspect-ratio)
     const previewContainer = document.getElementById('sheetPreviewContainer');
     if (previewContainer) {
       previewContainer.style.aspectRatio = `${pageDim.widthMm} / ${pageDim.heightMm}`;
@@ -1280,6 +1365,7 @@ export class UIController {
         sizingMode: state.sizingMode,
         cutMarksConfig: state.cutMarks,
         bleedMm: state.bleedMm,
+        bleedColor: state.bleedColor,
         stickerShape: state.stickerShape,
         cornerRadiusMm: state.cornerRadiusMm,
         registrationMarks: state.registrationMarks,
@@ -1437,6 +1523,25 @@ export class UIController {
     const bleedSelect = document.getElementById('bleedSelect') as HTMLSelectElement;
     if (bleedSelect) bleedSelect.value = state.bleedMm.toString();
 
+    const bleedColorGroup = document.getElementById('bleedColorGroup');
+    if (bleedColorGroup) {
+      bleedColorGroup.style.display = state.bleedMm > 0 ? 'flex' : 'none';
+    }
+
+    const curBleedColor = normalizeHexColor(state.bleedColor || '#FFFFFF');
+    const bleedColorPicker = document.getElementById('bleedColorPicker') as HTMLInputElement;
+    if (bleedColorPicker && document.activeElement !== bleedColorPicker) {
+      bleedColorPicker.value = curBleedColor;
+    }
+    const bleedColorHex = document.getElementById('bleedColorHex') as HTMLInputElement;
+    if (bleedColorHex && document.activeElement !== bleedColorHex) {
+      bleedColorHex.value = curBleedColor.toUpperCase();
+    }
+    const btnBleedEyedropper = document.getElementById('btnBleedEyedropper') as HTMLButtonElement;
+    if (btnBleedEyedropper) {
+      btnBleedEyedropper.disabled = !state.loadedImage;
+    }
+
     // Форма стикера, скругление и оптические метки совмещения плоттера
     const shape = state.stickerShape || 'rect';
     setChecked('shapeRect', shape === 'rect');
@@ -1524,9 +1629,10 @@ export class UIController {
     const isOverlap = state.bleedMm > 0 && (state.gapX < minGap || state.gapY < minGap);
     warningEl.style.display = isOverlap ? 'block' : 'none';
     if (warningTextEl && isOverlap) {
-      warningTextEl.textContent = t('warnBleedGapOverlap', {
-        bleed: state.bleedMm,
-        minGap,
+      const currentGap = Math.min(state.gapX, state.gapY);
+      warningTextEl.textContent = t('warnBleedEffectiveGap', {
+        effectiveGap: minGap,
+        gap: currentGap,
       });
     }
   }
@@ -1664,7 +1770,7 @@ export class UIController {
           </div>
           <div class="stats-details">
             <div><strong>${t('statGrid')}</strong> ${t('statColsRows', { cols: layout.columns, rows: layout.rows })}</div>
-            <div><strong>${t('statCapacity')}</strong> ${t('itemsBadge', { count: layout.totalCapacity })} ${state.requestedCopies !== 'AUTO' ? t('statRequested', { req: state.requestedCopies }) : ''}</div>
+            <div><strong>${t('statCapacity')}</strong> ${t('itemsBadge', { count: layout.totalCapacity })} ${state.requestedCopies !== 'AUTO' ? t('statRequested', { req: state.requestedCopies }) : ''} ${layout.capacityWithoutBleed !== undefined && layout.capacityWithoutBleed > layout.totalCapacity ? `<span class="capacity-bleed-diff" style="color: #64748b; font-size: 0.88em; font-weight: normal; margin-left: 4px;">${t('bleedCapacityDiff', { count: layout.capacityWithoutBleed })}</span>` : ''}</div>
             <div><strong>${t('statStickerRotation')}</strong> ${layout.selectedRotation === 90 ? t('statRotated90') : t('statNoRotation')}</div>
           </div>
           <div class="recommendation-box">
@@ -1757,6 +1863,9 @@ export class UIController {
       return t('errStickerSizeZero');
     }
     if (layout.totalCapacity === 0) {
+      if (state.bleedMm > 0 && layout.capacityWithoutBleed !== undefined && layout.capacityWithoutBleed > 0) {
+        return t('errBleedTooLarge');
+      }
       return t('errNoFit');
     }
 
@@ -1774,6 +1883,34 @@ export class UIController {
       }
       return t('recPlacedNoRotation', { orig: layout.totalCapacity });
     }
+  }
+
+  /**
+   * Блокировка/разблокировка кнопок экспорта при невозможности размещения наклеек
+   */
+  private updateExportButtonsState(layout: LayoutResult | null) {
+    const isExportDisabled = !layout || layout.hasError || layout.totalCapacity === 0 || layout.positions.length === 0;
+
+    const exportBtnIds = [
+      'btnDownloadPdf',
+      'btnHeaderDownloadPdf',
+      'btnMobileDownloadPdf',
+      'btnDownloadPng',
+      'btnHeaderDownloadPng',
+      'btnDownloadCutSvg',
+      'btnHeaderDownloadSvg',
+      'btnPrintPdf',
+    ];
+
+    exportBtnIds.forEach((id) => {
+      const btn = document.getElementById(id) as HTMLButtonElement | null;
+      if (btn) {
+        btn.disabled = isExportDisabled;
+        if (isExportDisabled && layout?.hasError) {
+          btn.title = t('errBleedTooLarge');
+        }
+      }
+    });
   }
 
   /**

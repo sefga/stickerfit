@@ -122,4 +122,19 @@ describe('i18n module', () => {
     expect(items[1].placeholder).toBe('AUTO or number');
     expect(items[2].title).toBe('Reset crop');
   });
+
+  it('должен содержать корректные переводы для всех ключей Bleed в обеих локалях', () => {
+    setLanguage('ru');
+    expect(t('lblBleedColor')).toBe('Цвет вылета');
+    expect(t('lblBleedEyedropper')).toBe('Пипетка');
+    expect(t('warnBleedEffectiveGap', { effectiveGap: 4, gap: 2 })).toContain('4 мм');
+    expect(t('bleedCapacityDiff', { count: 20 })).toContain('20 шт.');
+
+    setLanguage('en');
+    expect(t('lblBleedColor')).toBe('Bleed color');
+    expect(t('lblBleedEyedropper')).toBe('Eyedropper');
+    expect(t('warnBleedEffectiveGap', { effectiveGap: 4, gap: 2 })).toContain('4 mm');
+    expect(t('bleedCapacityDiff', { count: 20 })).toContain('20 pcs');
+  });
 });
+

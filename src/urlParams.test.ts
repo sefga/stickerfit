@@ -117,4 +117,11 @@ describe('parseUrlSettings (Smart Deeplinks for ChatGPT & Web)', () => {
       allowRotation: true,
     });
   });
+
+  it('парсинг параметров bleed и bleedColor', () => {
+    const url = '?bleed=2&bleedColor=3b82f6';
+    const res = parseUrlSettings(url);
+    expect(res.bleedMm).toBe(2);
+    expect(res.bleedColor).toBe('#3b82f6');
+  });
 });

@@ -4,6 +4,7 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, drawCutMarksOnPdf, generateCutMarks } from './cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
+import { getBleedDifferenceSvgPath, hexToRgb01, normalizeHexColor } from '../layout/bleedGeometry';
 
 export interface PdfExportOptions {
   pageWidthMm: number;
@@ -13,21 +14,21 @@ export interface PdfExportOptions {
   imageMimeType?: string;
   cutMarks?: CutMarksConfig;
   bleedMm?: number; // 0, 1, 2, 3 мм
+  bleedColor?: string;
   stickerShape?: StickerShape;
   cornerRadiusMm?: number;
   registrationMarks?: boolean;
 }
 
 /**
- * Преобразование растрового изображения стикера в маскированный PNG с альфа-каналом по форме (круг/скругление)
- * с учетом вылета Bleed. Обеспечивает честную форму в PDF без квадратных кромок.
+ * Преобразование растрового изображения стикера в маскированный PNG с альфа-каналом по форме (круг/скругление).
+ * Маскирование выполняется строго по контуру реза готовой наклейки (без растяжения на вылет).
  */
 async function createMaskedStickerPng(
   imageBytes: Uint8Array,
   imageMimeType: string | undefined,
   shape: StickerShape,
   cornerRadiusMm: number,
-  bleedMm: number,
   stickerWidthMm: number,
   stickerHeightMm: number
 ): Promise<{ bytes: Uint8Array; mimeType: string }> {
@@ -46,13 +47,8 @@ async function createMaskedStickerPng(
         const naturalW = img.naturalWidth || 500;
         const naturalH = img.naturalHeight || 500;
 
-        const totalWMm = stickerWidthMm + bleedMm * 2;
-        const totalHMm = stickerHeightMm + bleedMm * 2;
-        const scaleFactorX = totalWMm / Math.max(0.1, stickerWidthMm);
-        const scaleFactorY = totalHMm / Math.max(0.1, stickerHeightMm);
-
-        const canvasW = Math.round(naturalW * scaleFactorX);
-        const canvasH = Math.round(naturalH * scaleFactorY);
+        const canvasW = naturalW;
+        const canvasH = naturalH;
 
         const canvas = document.createElement('canvas');
         canvas.width = canvasW;
@@ -73,7 +69,9 @@ async function createMaskedStickerPng(
           ctx.clip();
         } else if (shape === 'rounded') {
           ctx.beginPath();
-          const rPx = Math.min(canvasW / 2, canvasH / 2, Math.max(0, (cornerRadiusMm + bleedMm) * (canvasW / totalWMm)));
+          const maxR = Math.min(stickerWidthMm / 2, stickerHeightMm / 2);
+          const clampedR = Math.min(Math.max(0, cornerRadiusMm), maxR);
+          const rPx = Math.min(canvasW / 2, canvasH / 2, Math.max(0, clampedR * (canvasW / stickerWidthMm)));
           if (typeof ctx.roundRect === 'function') {
             ctx.roundRect(0, 0, canvasW, canvasH, rPx);
           } else {
@@ -108,7 +106,7 @@ async function createMaskedStickerPng(
 }
 
 /**
- * Программная генерация PDF A4 с точными физическими размерами в миллиметрах
+ * Программная генерация PDF с точными физическими размерами в миллиметрах (1:1 MediaBox).
  */
 export async function generateStickerSheetPdf(options: PdfExportOptions): Promise<Uint8Array> {
   const {
@@ -119,6 +117,7 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
     imageMimeType,
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
+    bleedColor = '#FFFFFF',
     stickerShape = 'rect',
     cornerRadiusMm = 3,
     registrationMarks = false,
@@ -145,7 +144,6 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
         imageMimeType,
         stickerShape,
         cornerRadiusMm,
-        bleedMm,
         firstPos.widthMm,
         firstPos.heightMm
       );
@@ -161,20 +159,40 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
     }
   }
 
+  const rgbColor = hexToRgb01(normalizeHexColor(bleedColor));
+  const pdfBleedColor = rgb(rgbColor.r, rgbColor.g, rgbColor.b);
+  const ptPerMm = 72 / 25.4;
+
   // Отрисовка каждого стикера из рассчитанной сетки layoutEngine
   for (const pos of layout.positions) {
-    // Геометрия стикера с учетом Bleed (довылета под обрез)
-    // Trim size (линия чистого реза) остается pos.widthMm x pos.heightMm
-    const artXMm = pos.xMm - bleedMm;
-    const artYMm = pos.yMm - bleedMm;
-    const artWidthMm = pos.widthMm + bleedMm * 2;
-    const artHeightMm = pos.heightMm + bleedMm * 2;
+    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0)
+    if (bleedMm > 0) {
+      const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
+      const bleedPath = getBleedDifferenceSvgPath({
+        xMm: pos.xMm,
+        yMm: pos.yMm,
+        widthMm: pos.widthMm,
+        heightMm: pos.heightMm,
+        bleedMm,
+        shape: stickerShape,
+        cornerRadiusMm: clampedRadius,
+      });
 
-    // В PDF ось Y направлена снизу вверх, начало в левом нижнем углу
-    const xPt = mmToPoints(artXMm);
-    const yPt = pageHeightPt - mmToPoints(artYMm + artHeightMm);
-    const wPt = mmToPoints(artWidthMm);
-    const hPt = mmToPoints(artHeightMm);
+      if (bleedPath) {
+        page.drawSvgPath(bleedPath, {
+          x: 0,
+          y: pageHeightPt,
+          scale: ptPerMm,
+          color: pdfBleedColor,
+        });
+      }
+    }
+
+    // FR-001, FR-004: Изображение наклейки выводится строго по контуру реза 1:1 без растяжения
+    const xPt = mmToPoints(pos.xMm);
+    const yPt = pageHeightPt - mmToPoints(pos.yMm + pos.heightMm);
+    const wPt = mmToPoints(pos.widthMm);
+    const hPt = mmToPoints(pos.heightMm);
 
     if (embeddedImage) {
       page.drawImage(embeddedImage, {

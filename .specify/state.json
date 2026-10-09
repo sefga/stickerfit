@@ -1,18 +1,34 @@
 {
-  "active": true,
-  "taskScope": "Включение внешней рамки листа (Sheet Cut Frame / Page Border) в SVG экспорт контура резки для точной фиксации начала координат (0,0) по физическому углу листа А4 в плоттерных программах (Easy Cut Studio) и расчет параметров для круга 35.4 мм",
-  "phase": "VERIFIED",
+  "active": false,
+  "taskScope": "Реализовать в StickerFit цветной внешний вылет под обрез с сохранением точного размера наклейки, защитой от наложения соседних вылетов и одинаковой геометрией предпросмотра и экспорта.",
+  "phase": "DONE",
   "allowedFiles": [
+    "src/layout/bleedGeometry.ts",
+    "src/layout/bleedGeometry.test.ts",
+    "src/layout/layoutEngine.ts",
+    "src/layout/layoutEngine.test.ts",
+    "src/state.ts",
+    "src/preview/previewRenderer.ts",
+    "src/preview/previewRenderer.test.ts",
+    "src/pdf/pdfGenerator.ts",
+    "src/pdf/pdfGenerator.test.ts",
+    "src/export/pngGenerator.ts",
+    "src/export/pngGenerator.test.ts",
     "src/export/svgCutGenerator.ts",
     "src/export/svgCutGenerator.test.ts",
-    "src/state.ts",
+    "src/ui/eyedropper.ts",
     "src/ui/controls.ts",
+    "src/styles.css",
     "src/i18n.ts",
+    "src/i18n.test.ts",
     "index.html",
-    "specs/004-plotter-sheet-cut-frame/spec.md",
-    "specs/004-plotter-sheet-cut-frame/plan.md",
-    "specs/004-plotter-sheet-cut-frame/checklists/requirements.md",
-    "specs/004-plotter-sheet-cut-frame/tasks.md",
+    "tests/printCorrectness.test.ts",
+    "tests/thermalRollLength.test.ts",
+    "specs/005-color-bleed-margin/spec.md",
+    "specs/005-color-bleed-margin/plan.md",
+    "specs/005-color-bleed-margin/checklists/requirements.md",
+    "specs/005-color-bleed-margin/tasks.md",
+    ".specify/feature.json",
     ".specify/state.json"
   ],
   "verificationRequired": [
@@ -20,9 +36,9 @@
     "npm run build"
   ],
   "verificationEvidence": {
-    "test": "15 test files passed, 120 tests passed, exit code 0",
-    "build": "tsc && vite build exit code 0, 210 modules transformed"
+    "vitest": "18 test files passed (148 tests passed)",
+    "build": "tsc && vite build completed with 0 errors in 3.00s"
   },
-  "tasksCompleted": 8,
-  "tasksTotal": 8
+  "tasksCompleted": 12,
+  "tasksTotal": 12
 }

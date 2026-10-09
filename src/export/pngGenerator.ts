@@ -2,6 +2,7 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, generateCutMarks } from '../pdf/cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from './svgCutGenerator';
+import { getBleedDifferenceSvgPath, normalizeHexColor, getBleedBounds } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PngExportOptions {
@@ -12,6 +13,7 @@ export interface PngExportOptions {
   imageDataUrl?: string | null;
   cutMarks?: CutMarksConfig;
   bleedMm?: number;
+  bleedColor?: string;
   dpi?: number;
   stickerShape?: StickerShape;
   cornerRadiusMm?: number;
@@ -30,6 +32,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
     imageDataUrl,
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
+    bleedColor = '#FFFFFF',
     dpi = 300,
     stickerShape = 'rect',
     cornerRadiusMm = 3,
@@ -71,16 +74,63 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
 
   // 3. Отрисовка каждого экземпляра наклейки
   for (const pos of layout.positions) {
-    // Учитываем вылет под обрез (Bleed)
-    const artXMm = pos.xMm - bleedMm;
-    const artYMm = pos.yMm - bleedMm;
-    const artWMm = pos.widthMm + bleedMm * 2;
-    const artHMm = pos.heightMm + bleedMm * 2;
+    const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
 
-    const px = Math.round(artXMm * dpmm);
-    const py = Math.round(artYMm * dpmm);
-    const pw = Math.round(artWMm * dpmm);
-    const ph = Math.round(artHMm * dpmm);
+    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0)
+    if (bleedMm > 0) {
+      const color = normalizeHexColor(bleedColor);
+      const bleedPathStr = getBleedDifferenceSvgPath({
+        xMm: pos.xMm,
+        yMm: pos.yMm,
+        widthMm: pos.widthMm,
+        heightMm: pos.heightMm,
+        bleedMm,
+        shape: stickerShape,
+        cornerRadiusMm: clampedRadius,
+      });
+
+      if (bleedPathStr) {
+        ctx.save();
+        if (typeof Path2D !== 'undefined') {
+          ctx.scale(dpmm, dpmm);
+          const p2d = new Path2D(bleedPathStr);
+          ctx.fillStyle = color;
+          ctx.fill(p2d, 'evenodd');
+        } else {
+          // Фоллбэк для тестовых сред без полной реализации Path2D
+          const bounds = getBleedBounds({
+            xMm: pos.xMm,
+            yMm: pos.yMm,
+            widthMm: pos.widthMm,
+            heightMm: pos.heightMm,
+            bleedMm,
+            shape: stickerShape,
+            cornerRadiusMm: clampedRadius,
+          });
+          const oPx = Math.round(bounds.outerX * dpmm);
+          const oPy = Math.round(bounds.outerY * dpmm);
+          const oPw = Math.round(bounds.outerWidth * dpmm);
+          const oPh = Math.round(bounds.outerHeight * dpmm);
+          const inPx = Math.round(pos.xMm * dpmm);
+          const inPy = Math.round(pos.yMm * dpmm);
+          const inPw = Math.round(pos.widthMm * dpmm);
+          const inPh = Math.round(pos.heightMm * dpmm);
+
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.rect(oPx, oPy, oPw, oPh);
+          ctx.rect(inPx + inPw, inPy, -inPw, inPh);
+          ctx.fill('evenodd');
+        }
+        ctx.restore();
+      }
+    }
+
+    // FR-001, FR-004: Изображение наклейки выводится строго по контуру реза 1:1 без растяжения
+    const px = Math.round(pos.xMm * dpmm);
+    const py = Math.round(pos.yMm * dpmm);
+    const pw = Math.round(pos.widthMm * dpmm);
+    const ph = Math.round(pos.heightMm * dpmm);
 
     if (imgToDraw) {
       if (stickerShape === 'circle') {
@@ -94,7 +144,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
       } else if (stickerShape === 'rounded') {
         ctx.save();
         ctx.beginPath();
-        const rPx = Math.min(pw / 2, ph / 2, Math.max(0, (cornerRadiusMm + bleedMm) * dpmm));
+        const rPx = Math.round(clampedRadius * dpmm);
         if (typeof ctx.roundRect === 'function') {
           ctx.roundRect(px, py, pw, ph, rPx);
         } else {
@@ -107,7 +157,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
         ctx.drawImage(imgToDraw, px, py, pw, ph);
       }
     } else {
-      // Отрисовка аккуратного плейсхолдера для пустого стикера
+      // Отрисовка плейсхолдера для пустого стикера
       ctx.fillStyle = '#f8fafc';
       ctx.strokeStyle = '#94a3b8';
       ctx.lineWidth = Math.max(1, Math.round(0.3 * dpmm));
@@ -119,7 +169,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
         ctx.fill();
         ctx.stroke();
       } else if (stickerShape === 'rounded') {
-        const rPx = Math.min(pw / 2, ph / 2, Math.max(0, (cornerRadiusMm + bleedMm) * dpmm));
+        const rPx = Math.round(clampedRadius * dpmm);
         ctx.beginPath();
         if (typeof ctx.roundRect === 'function') {
           ctx.roundRect(px, py, pw, ph, rPx);

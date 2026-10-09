@@ -280,4 +280,147 @@ describe('Layout Engine — Математические тесты геомет
       expect(resultCenter.positions[0].yMm).toBeGreaterThanOrEqual(margins.top);
     });
   });
+
+  describe('Bleed Margin (Вылет под обрез) — Инварианты и критерии приёмки AC-001..AC-006', () => {
+    it('AC-001 & AC-005: A4 210x297, поля 5 мм, стикер 50x50, gap=0 -> вместимость без вылета 20, с вылетом 1 мм — 15', () => {
+      const result = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins: { top: 5, bottom: 5, left: 5, right: 5 },
+        gapX: 0,
+        gapY: 0,
+        allowRotation: false,
+        bleedMm: 1,
+      });
+
+      // Вместимость без вылета = 20, с вылетом 1 мм = 15
+      expect(result.capacityWithoutBleed).toBe(20);
+      expect(result.totalCapacity).toBe(15);
+      expect(result.columns).toBe(3);
+      expect(result.rows).toBe(5);
+
+      // Контур реза остается ровно 50x50 мм
+      expect(result.positions[0].widthMm).toBe(50);
+      expect(result.positions[0].heightMm).toBe(50);
+    });
+
+    it('AC-002: gapX = gapY = 3 мм, bleed = 1 мм -> effectiveGap = 3 мм, чистый промежуток между заливками = 1 мм', () => {
+      const result = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins: { top: 5, bottom: 5, left: 5, right: 5 },
+        gapX: 3,
+        gapY: 3,
+        allowRotation: false,
+        spacingMode: 'start',
+        bleedMm: 1,
+      });
+
+      expect(result.effectiveGapX).toBe(3);
+      expect(result.effectiveGapY).toBe(3);
+
+      // Расстояние между линиями реза
+      const cutLineGap = result.positions[1].xMm - (result.positions[0].xMm + result.positions[0].widthMm);
+      expect(cutLineGap).toBeCloseTo(3, 3);
+
+      // Чистый промежуток между внешними заливками: cutLineGap - 2*b = 3 - 2 = 1 мм
+      const bleedClearGap = cutLineGap - 2 * 1;
+      expect(bleedClearGap).toBeCloseTo(1, 3);
+    });
+
+    it('AC-003: заданный зазор 1 мм, bleed = 2 мм -> применяется minGap = 4 мм, соприкосновение без наложения', () => {
+      const result = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins: { top: 5, bottom: 5, left: 5, right: 5 },
+        gapX: 1,
+        gapY: 1,
+        allowRotation: false,
+        spacingMode: 'start',
+        bleedMm: 2,
+      });
+
+      expect(result.effectiveGapX).toBe(4);
+      expect(result.effectiveGapY).toBe(4);
+
+      // Расстояние между линиями реза = 4 мм
+      const cutLineGap = result.positions[1].xMm - (result.positions[0].xMm + result.positions[0].widthMm);
+      expect(cutLineGap).toBeCloseTo(4, 3);
+
+      // Чистый промежуток между внешними заливками: 4 - 2*2 = 0 мм (соприкосновение граней)
+      const bleedClearGap = cutLineGap - 2 * 2;
+      expect(bleedClearGap).toBeCloseTo(0, 3);
+    });
+
+    it('AC-004: в режиме start при поле 5 мм и bleed 1 мм край заливки начинается в 5 мм, рез — в 6 мм', () => {
+      const result = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins: { top: 5, bottom: 5, left: 5, right: 5 },
+        gapX: 2,
+        gapY: 2,
+        allowRotation: false,
+        spacingMode: 'start',
+        bleedMm: 1,
+      });
+
+      // Линия реза в 6 мм
+      expect(result.positions[0].xMm).toBe(6);
+      expect(result.positions[0].yMm).toBe(6);
+
+      // Внешний край заливки: 6 - 1 = 5 мм (ровно отступ поля)
+      const outerBleedEdgeX = result.positions[0].xMm - 1;
+      const outerBleedEdgeY = result.positions[0].yMm - 1;
+      expect(outerBleedEdgeX).toBe(5);
+      expect(outerBleedEdgeY).toBe(5);
+    });
+
+    it('AC-006: если из-за вылета наклейка не помещается -> totalCapacity = 0, hasError = true', () => {
+      // Лист 60x60, поля 5, стикер 50x50, вылет 2 мм
+      // usableTrim = 60 - 10 - 4 = 46 мм < 50 мм -> 0 шт.
+      const result = calculateLayout({
+        pageWidthMm: 60,
+        pageHeightMm: 60,
+        stickerWidthMm: 50,
+        stickerHeightMm: 50,
+        margins: { top: 5, bottom: 5, left: 5, right: 5 },
+        gapX: 2,
+        gapY: 2,
+        allowRotation: true,
+        bleedMm: 2,
+      });
+
+      expect(result.totalCapacity).toBe(0);
+      expect(result.actualCopies).toBe(0);
+      expect(result.positions).toHaveLength(0);
+      expect(result.hasError).toBe(true);
+      expect(result.errorMessage).toContain('не помещается');
+    });
+
+    it('FR-013: автоповорот сравнивает вместимость с учетом вылета', () => {
+      const result = calculateLayout({
+        pageWidthMm: 210,
+        pageHeightMm: 297,
+        stickerWidthMm: 54,
+        stickerHeightMm: 85,
+        margins: { top: 5, bottom: 5, left: 5, right: 5 },
+        gapX: 2,
+        gapY: 2,
+        allowRotation: true,
+        bleedMm: 1,
+      });
+
+      // Должен корректно выбрать поворот 90° или 0° с учетом вылета
+      expect(result.totalCapacity).toBeGreaterThan(0);
+      expect(result.positions[0].widthMm).toBe(result.selectedRotation === 90 ? 85 : 54);
+    });
+  });
 });
