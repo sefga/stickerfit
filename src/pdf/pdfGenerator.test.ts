@@ -230,4 +230,57 @@ describe('PDF Regression Test (§30 ТЗ)', () => {
     // При отключенном контуре реза красные линии отсутствуют
     expect(allStreamsText).not.toContain('1 0 0 RG');
   });
+
+  it('007-FR-01 & AC-01: Контур реза располагается ПОД растровым изображением (1 0 0 RG предшествует оператору Do)', async () => {
+    const dummyPngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const dummyImageBytes = new Uint8Array(Buffer.from(dummyPngBase64, 'base64'));
+
+    const layout = calculateLayout({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 10, bottom: 10, left: 10, right: 10 },
+      gapX: 4,
+      gapY: 4,
+      allowRotation: false,
+      bleedMm: 2,
+    });
+
+    const pdfBytes = await generateStickerSheetPdf({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      layout,
+      imageBytes: dummyImageBytes,
+      imageMimeType: 'image/png',
+      stickerShape: 'circle',
+      bleedMm: 2,
+      includeCutContour: true,
+    });
+
+    const loadedPdf = await PDFDocument.load(pdfBytes);
+    const p = loadedPdf.getPages()[0];
+    const contents: any = p.node.normalizedEntries().Contents;
+    let allStreamsText = '';
+    const zlib = await import('zlib');
+    for (let i = 0; i < contents.size(); i++) {
+      const streamRef = contents.get(i);
+      const streamObj: any = loadedPdf.context.lookup(streamRef);
+      const raw = streamObj.getContents();
+      try {
+        allStreamsText += zlib.inflateSync(raw).toString('utf-8') + '\n';
+      } catch {
+        allStreamsText += Buffer.from(raw).toString('utf-8') + '\n';
+      }
+    }
+
+    const firstContourIndex = allStreamsText.indexOf('1 0 0 RG');
+    const firstDoIndex = allStreamsText.indexOf('Do');
+
+    expect(firstContourIndex).toBeGreaterThan(-1);
+    expect(firstDoIndex).toBeGreaterThan(-1);
+    // Векторный контур записан в content stream ДО растрового объекта Do (underlay z-order)
+    expect(firstContourIndex).toBeLessThan(firstDoIndex);
+  });
 });

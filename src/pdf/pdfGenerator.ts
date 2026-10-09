@@ -240,27 +240,8 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
 
   // Отрисовка каждого стикера из рассчитанной сетки layoutEngine
   for (const pos of layout.positions) {
-    // 1. Отрисовка растрового изображения (с запеченным вылетом или без)
-    if (embeddedImage) {
-      const xMm = bleedMm > 0 ? pos.xMm - bleedMm : pos.xMm;
-      const yMm = bleedMm > 0 ? pos.yMm - bleedMm : pos.yMm;
-      const wMm = bleedMm > 0 ? pos.widthMm + 2 * bleedMm : pos.widthMm;
-      const hMm = bleedMm > 0 ? pos.heightMm + 2 * bleedMm : pos.heightMm;
-
-      const xPt = mmToPoints(xMm);
-      const yPt = pageHeightPt - mmToPoints(yMm + hMm);
-      const wPt = mmToPoints(wMm);
-      const hPt = mmToPoints(hMm);
-
-      page.drawImage(embeddedImage, {
-        x: xPt,
-        y: yPt,
-        width: wPt,
-        height: hPt,
-      });
-    }
-
-    // 2. Векторный контур реза 1:1 строго по форме готовой наклейки (CutContour для Easy Cut Studio / плоттеров)
+    // 1. Векторный контур реза 1:1 строго по форме готовой наклейки (CutContour для Easy Cut Studio / плоттеров)
+    // Рисуется ПОД растровым изображением (underlay z-order), чтобы принтер печатал чистое изображение с вылетом без видимой красной линии
     if (includeCutContour) {
       const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
       const contourPath = getStickerContourSvgPath({
@@ -278,6 +259,26 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
         scale: ptPerMm,
         borderColor: rgb(1, 0, 0),
         borderWidth: mmToPoints(0.1),
+      });
+    }
+
+    // 2. Отрисовка растрового изображения (с запеченным вылетом или без) поверх векторного контура реза
+    if (embeddedImage) {
+      const xMm = bleedMm > 0 ? pos.xMm - bleedMm : pos.xMm;
+      const yMm = bleedMm > 0 ? pos.yMm - bleedMm : pos.yMm;
+      const wMm = bleedMm > 0 ? pos.widthMm + 2 * bleedMm : pos.widthMm;
+      const hMm = bleedMm > 0 ? pos.heightMm + 2 * bleedMm : pos.heightMm;
+
+      const xPt = mmToPoints(xMm);
+      const yPt = pageHeightPt - mmToPoints(yMm + hMm);
+      const wPt = mmToPoints(wMm);
+      const hPt = mmToPoints(hMm);
+
+      page.drawImage(embeddedImage, {
+        x: xPt,
+        y: yPt,
+        width: wPt,
+        height: hPt,
       });
     }
   }

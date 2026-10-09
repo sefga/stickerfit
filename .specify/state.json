@@ -1,19 +1,14 @@
 {
   "active": false,
-  "taskScope": "Исключить лишний внешний контур вылета и прямоугольные рамки при экспорте PDF, запекать вылет в растровое изображение наклейки и экспортировать только чистый внутренний векторный контур реза для Easy Cut Studio (Print & Cut)",
+  "taskScope": "Расположить векторный контур реза (CutContour) под растровым изображением стикера в PDF для скрытия от печати с сохранением вектора для плоттера",
   "phase": "DONE",
   "allowedFiles": [
-    "src/state.ts",
-    "src/i18n.ts",
-    "src/layout/bleedGeometry.ts",
     "src/pdf/pdfGenerator.ts",
     "src/pdf/pdfGenerator.test.ts",
-    "src/ui/controls.ts",
-    "index.html",
-    "specs/006-pdf-clean-cut-contour/spec.md",
-    "specs/006-pdf-clean-cut-contour/plan.md",
-    "specs/006-pdf-clean-cut-contour/tasks.md",
-    "specs/006-pdf-clean-cut-contour/checklists/requirements.md",
+    "specs/007-pdf-cut-contour-underlay/spec.md",
+    "specs/007-pdf-cut-contour-underlay/plan.md",
+    "specs/007-pdf-cut-contour-underlay/tasks.md",
+    "specs/007-pdf-cut-contour-underlay/checklists/requirements.md",
     ".specify/feature.json",
     ".specify/state.json",
     ".specify/IMPLEMENTATION_GATE.md"
@@ -23,9 +18,9 @@
     "npm run build"
   ],
   "verificationEvidence": {
-    "vitest": "19 test files passed (163 tests passed)",
-    "build": "tsc && vite build completed in 6.15s with 0 errors"
+    "vitest": "19 test files passed (164 tests passed)",
+    "build": "tsc && vite build completed in 4.28s with 0 errors"
   },
-  "tasksCompleted": 11,
-  "tasksTotal": 11
+  "tasksCompleted": 3,
+  "tasksTotal": 3
 }
