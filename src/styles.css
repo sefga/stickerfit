@@ -1588,7 +1588,8 @@ input.input-has-error {
   border-radius: 4px;
   margin: auto;
   position: relative;
-  will-change: transform;
+  /* Постоянный will-change: transform сохраняет растр листа при увеличении.
+     SVG должен перерисовываться в текущем масштабе, чтобы детали оставались чёткими. */
 }
 
 .sheet-shadow-wrapper.landscape {

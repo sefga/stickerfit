@@ -128,6 +128,7 @@ Read our comprehensive guide: **[docs/PRINT_ACCURACY.md](docs/PRINT_ACCURACY.md)
 | Документ | Назначение |
 |:---|:---|
 | **[docs/PRINT_ACCURACY.md](docs/PRINT_ACCURACY.md)** | Руководство по физической точности печати и калибровке принтера линейкой |
+| **[docs/PREVIEW_QUALITY.md](docs/PREVIEW_QUALITY.md)** | Диагностика чёткости предпросмотра и проверка увеличения листа |
 | **[docs/PRODUCT_LAUNCH_AUDIT.md](docs/PRODUCT_LAUNCH_AUDIT.md)** | Карта архитектуры, аудит baseline и классификация задач P0/P1/P2 |
 | **[docs/SEO_STRATEGY.md](docs/SEO_STRATEGY.md)** | Стратегия честного поискового продвижения и AI Discoverability (GEO) |
 | **[docs/MONETIZATION_HYPOTHESES.md](docs/MONETIZATION_HYPOTHESES.md)** | Бэклог гипотез H1–H6 (0 платного кода до подтверждения спроса) |
