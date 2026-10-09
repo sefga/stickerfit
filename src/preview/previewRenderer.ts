@@ -4,7 +4,7 @@ import { Margins } from '../layout/layoutEngine';
 import { SizingMode } from '../image/cropEngine';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
-import { getBleedOuterSvgPath, normalizeHexColor } from '../layout/bleedGeometry';
+import { getBleedDifferenceSvgPath, getBleedOuterSvgPath, normalizeHexColor } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PreviewOptions {
@@ -13,6 +13,7 @@ export interface PreviewOptions {
   margins: Margins;
   layout: LayoutResult;
   imageUrl?: string | null;
+  edgeFillPath?: string;
   sizingMode?: SizingMode;
   cutMarksConfig: CutMarksConfig;
   bleedMm?: number;
@@ -33,6 +34,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     margins,
     layout,
     imageUrl,
+    edgeFillPath,
     sizingMode = 'fill',
     cutMarksConfig,
     bleedMm = 0,
@@ -57,7 +59,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
   const stickerW = firstPos ? firstPos.widthMm : 50;
   const stickerH = firstPos ? firstPos.heightMm : 50;
   const par = sizingMode === 'fit' ? 'xMidYMid meet' : 'xMidYMid slice';
-  const shouldApplyShadow = layout.positions.length <= 40;
+  const shouldApplyShadow = layout.positions.length <= 40 && bleedMm === 0;
 
   const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(stickerW, stickerH) / 2));
 
@@ -81,14 +83,23 @@ export function renderPreviewSvg(options: PreviewOptions): string {
   // Определение стилей, фильтров и переиспользуемых элементов
   let imageDef = '';
   if (imageUrl) {
+    const edgeFill = bleedMm > 0 && edgeFillPath
+      ? `<path d="${edgeFillPath}" fill="${normalizeHexColor(bleedColor)}" clip-path="url(#stickerBleedClip)" />`
+      : '';
+    const outerPath = getBleedOuterSvgPath({
+      xMm: 0, yMm: 0, widthMm: stickerW, heightMm: stickerH,
+      bleedMm, shape: stickerShape, cornerRadiusMm: clampedRadius,
+    });
     imageDef = `
       <clipPath id="stickerShapeClip">
         ${clipGeometry}
       </clipPath>
+      <clipPath id="stickerBleedClip"><path d="${outerPath}" /></clipPath>
       <g id="stickerArtSource">
         <g clip-path="url(#stickerShapeClip)">
           <image href="${imageUrl}" x="0" y="0" width="${stickerW}" height="${stickerH}" preserveAspectRatio="${par}" />
         </g>
+        ${edgeFill}
         ${strokeContour}
       </g>
     `;
@@ -142,10 +153,10 @@ export function renderPreviewSvg(options: PreviewOptions): string {
   visiblePositions.forEach((pos, idx) => {
     const { xMm, yMm, widthMm, heightMm } = pos;
 
-    // FR-008: Внешний цветной вылет под обрез реальным цветом bleedColor (монолитная бесшовная подложка)
+    // Внешнее кольцо сохраняет прозрачные участки и поля Fit внутри наклейки.
     if (bleedMm > 0) {
       const color = normalizeHexColor(bleedColor);
-      const bleedPath = getBleedOuterSvgPath({
+      const bleedPath = getBleedDifferenceSvgPath({
         xMm,
         yMm,
         widthMm,
@@ -157,7 +168,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
 
       if (bleedPath) {
         svgParts.push(
-          `<path d="${bleedPath}" fill="${color}" stroke="none" />`
+          `<path d="${bleedPath}" fill="${color}" fill-rule="evenodd" stroke="none" />`
         );
       }
     }

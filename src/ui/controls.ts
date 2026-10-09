@@ -2,6 +2,7 @@ import { store, AppState, PageOrientation, PngDpi, StickerShape } from '../state
 import { calculateLayout, LayoutResult, SpacingMode } from '../layout/layoutEngine';
 import { loadSourceImage, extractImageFromClipboard, isSupportedImageType } from '../image/imageLoader';
 import { renderCroppedArtwork, CropData } from '../image/cropEngine';
+import { EdgeFillGeometry } from '../image/edgeBackground';
 import { getDpiInfo } from '../image/dpiCalculator';
 import { cropDialog } from './cropDialog';
 import { generateStickerSheetPdf, downloadPdfBlob, openPdfForPrint } from '../pdf/pdfGenerator';
@@ -40,6 +41,7 @@ export class UIController {
     sizingMode: string;
     aspectRatio: number;
     sheetRotation: number;
+    edgeGeometry: string;
   } | null = null;
 
   constructor() {
@@ -721,9 +723,16 @@ export class UIController {
       this.handleDownloadTemplateSvg();
     });
 
-    bleedSelect?.addEventListener('change', () => {
+    bleedSelect?.addEventListener('change', async () => {
       store.update({ bleedMm: parseInt(bleedSelect.value, 10) || 0 });
       this.updateBleedGapWarning();
+      await this.recalculateArtwork();
+    });
+
+    const bleedEdgeCleanup = document.getElementById('bleedEdgeCleanup') as HTMLInputElement;
+    bleedEdgeCleanup?.addEventListener('change', async () => {
+      store.update({ bleedEdgeCleanup: bleedEdgeCleanup.checked });
+      await this.recalculateArtwork();
     });
 
     const bleedColorPicker = document.getElementById('bleedColorPicker') as HTMLInputElement;
@@ -1009,6 +1018,7 @@ export class UIController {
     }
 
     this.isProcessingImage = true;
+    this.updateExportButtonsState(this.currentLayout);
     try {
       do {
         this.hasPendingArtworkRecalculation = false;
@@ -1033,6 +1043,14 @@ export class UIController {
 
         const sheetRotation = layout.selectedRotation;
         const aspectRatio = roundMm(currentState.stickerWidthMm / currentState.stickerHeightMm, 4);
+        const edgeFillGeometry: EdgeFillGeometry | undefined = currentState.bleedMm > 0 && currentState.bleedEdgeCleanup
+          ? {
+              widthMm: sheetRotation === 90 ? currentState.stickerHeightMm : currentState.stickerWidthMm,
+              heightMm: sheetRotation === 90 ? currentState.stickerWidthMm : currentState.stickerHeightMm,
+              shape: currentState.stickerShape,
+              cornerRadiusMm: currentState.cornerRadiusMm,
+            }
+          : undefined;
 
         const cacheKey = {
           imageSrc: currentState.loadedImage.imageElement.src,
@@ -1040,6 +1058,7 @@ export class UIController {
           sizingMode: currentState.sizingMode,
           aspectRatio,
           sheetRotation,
+          edgeGeometry: JSON.stringify(edgeFillGeometry) ?? '',
         };
 
         if (
@@ -1049,6 +1068,7 @@ export class UIController {
           this.lastArtworkCache.sizingMode === cacheKey.sizingMode &&
           Math.abs(this.lastArtworkCache.aspectRatio - cacheKey.aspectRatio) < 0.001 &&
           this.lastArtworkCache.sheetRotation === cacheKey.sheetRotation &&
+          this.lastArtworkCache.edgeGeometry === cacheKey.edgeGeometry &&
           currentState.croppedResult !== null
         ) {
           // Кэш актуален, пропускаем тяжелый рендер холста
@@ -1061,7 +1081,8 @@ export class UIController {
           currentState.sizingMode,
           aspectRatio,
           currentState.loadedImage.mimeType,
-          sheetRotation
+          sheetRotation,
+          edgeFillGeometry
         );
 
         // Освобождаем предыдущий Blob URL из памяти браузера при создании нового
@@ -1091,6 +1112,7 @@ export class UIController {
       console.error('Ошибка нарезки изображения:', e);
     } finally {
       this.isProcessingImage = false;
+      this.updateExportButtonsState(this.currentLayout);
     }
   }
 
@@ -1112,6 +1134,7 @@ export class UIController {
       layout: this.currentLayout,
       imageBytes: state.croppedResult?.bytes,
       imageMimeType: state.croppedResult?.mimeType,
+      edgeFillPath: state.bleedEdgeCleanup ? state.croppedResult?.edgeFillPath : undefined,
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
       bleedColor: state.bleedColor,
@@ -1207,6 +1230,7 @@ export class UIController {
         pageHeightMm: pageDim.heightMm,
         layout: this.currentLayout,
         imageDataUrl: state.croppedResult?.dataUrl || null,
+        edgeFillPath: state.bleedEdgeCleanup ? state.croppedResult?.edgeFillPath : undefined,
         cutMarks: state.cutMarks,
         bleedMm: state.bleedMm,
         bleedColor: state.bleedColor,
@@ -1278,6 +1302,7 @@ export class UIController {
       layout: this.currentLayout,
       imageBytes: state.croppedResult?.bytes,
       imageMimeType: state.croppedResult?.mimeType,
+      edgeFillPath: state.bleedEdgeCleanup ? state.croppedResult?.edgeFillPath : undefined,
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
       bleedColor: state.bleedColor,
@@ -1362,6 +1387,7 @@ export class UIController {
         margins: state.margins,
         layout: this.currentLayout,
         imageUrl: state.croppedResult?.dataUrl || null,
+        edgeFillPath: state.bleedEdgeCleanup ? state.croppedResult?.edgeFillPath : undefined,
         sizingMode: state.sizingMode,
         cutMarksConfig: state.cutMarks,
         bleedMm: state.bleedMm,
@@ -1527,6 +1553,11 @@ export class UIController {
     if (bleedColorGroup) {
       bleedColorGroup.style.display = state.bleedMm > 0 ? 'flex' : 'none';
     }
+    const bleedEdgeCleanupGroup = document.getElementById('bleedEdgeCleanupGroup');
+    if (bleedEdgeCleanupGroup) {
+      bleedEdgeCleanupGroup.style.display = state.bleedMm > 0 ? 'block' : 'none';
+    }
+    setChecked('bleedEdgeCleanup', state.bleedEdgeCleanup);
 
     const curBleedColor = normalizeHexColor(state.bleedColor || '#FFFFFF');
     const bleedColorPicker = document.getElementById('bleedColorPicker') as HTMLInputElement;
@@ -1889,7 +1920,7 @@ export class UIController {
    * Блокировка/разблокировка кнопок экспорта при невозможности размещения наклеек
    */
   private updateExportButtonsState(layout: LayoutResult | null) {
-    const isExportDisabled = !layout || layout.hasError || layout.totalCapacity === 0 || layout.positions.length === 0;
+    const isExportDisabled = this.isProcessingImage || !layout || layout.hasError || layout.totalCapacity === 0 || layout.positions.length === 0;
 
     const exportBtnIds = [
       'btnDownloadPdf',
@@ -2543,4 +2574,3 @@ function getPaperCardDisplayInfo(
     }
   }
 }
-

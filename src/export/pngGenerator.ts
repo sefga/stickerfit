@@ -2,7 +2,7 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, generateCutMarks } from '../pdf/cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from './svgCutGenerator';
-import { getBleedOuterSvgPath, normalizeHexColor, getBleedBounds } from '../layout/bleedGeometry';
+import { getBleedDifferenceSvgPath, getBleedOuterSvgPath, normalizeHexColor, getBleedBounds } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PngExportOptions {
@@ -11,6 +11,7 @@ export interface PngExportOptions {
   layout: LayoutResult;
   imageElement?: HTMLImageElement | null;
   imageDataUrl?: string | null;
+  edgeFillPath?: string;
   cutMarks?: CutMarksConfig;
   bleedMm?: number;
   bleedColor?: string;
@@ -30,6 +31,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
     layout,
     imageElement,
     imageDataUrl,
+    edgeFillPath,
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
     bleedColor = '#FFFFFF',
@@ -72,14 +74,23 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
     });
   }
 
+  let edgeMask: Path2D | null = null;
+  if (imgToDraw && bleedMm > 0 && edgeFillPath) {
+    if (typeof Path2D === 'undefined') {
+      throw new Error('Браузер не поддерживает маску исправления светлой каймы (Path2D).');
+    }
+    // Большая маска исходника разбирается один раз для всех копий на листе.
+    edgeMask = new Path2D(edgeFillPath);
+  }
+
   // 3. Отрисовка каждого экземпляра наклейки
   for (const pos of layout.positions) {
     const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
 
-    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0, монолитная подложка)
+    // Кольцо вылета не закрашивает прозрачность и свободные поля внутри наклейки.
     if (bleedMm > 0) {
       const color = normalizeHexColor(bleedColor);
-      const bleedPathStr = getBleedOuterSvgPath({
+      const bleedPathStr = getBleedDifferenceSvgPath({
         xMm: pos.xMm,
         yMm: pos.yMm,
         widthMm: pos.widthMm,
@@ -95,7 +106,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
           ctx.scale(dpmm, dpmm);
           const p2d = new Path2D(bleedPathStr);
           ctx.fillStyle = color;
-          ctx.fill(p2d);
+          ctx.fill(p2d, 'evenodd');
         } else {
           // Фоллбэк для тестовых сред без полной реализации Path2D
           const bounds = getBleedBounds({
@@ -107,39 +118,45 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
             shape: stickerShape,
             cornerRadiusMm: clampedRadius,
           });
-          const oPx = Math.round(bounds.outerX * dpmm);
-          const oPy = Math.round(bounds.outerY * dpmm);
-          const oPw = Math.round(bounds.outerWidth * dpmm);
-          const oPh = Math.round(bounds.outerHeight * dpmm);
+          const oPx = bounds.outerX * dpmm;
+          const oPy = bounds.outerY * dpmm;
+          const oPw = bounds.outerWidth * dpmm;
+          const oPh = bounds.outerHeight * dpmm;
 
           ctx.fillStyle = color;
           ctx.beginPath();
           if (stickerShape === 'circle') {
-            const cx = Math.round((pos.xMm + pos.widthMm / 2) * dpmm);
-            const cy = Math.round((pos.yMm + pos.heightMm / 2) * dpmm);
-            const r = Math.round(bounds.outerRadius * dpmm);
+            const cx = (pos.xMm + pos.widthMm / 2) * dpmm;
+            const cy = (pos.yMm + pos.heightMm / 2) * dpmm;
+            const r = bounds.outerRadius * dpmm;
             ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.moveTo(cx + bounds.innerRadius * dpmm, cy);
+            ctx.arc(cx, cy, bounds.innerRadius * dpmm, 0, Math.PI * 2);
           } else if (stickerShape === 'rounded') {
-            const roPx = Math.round(bounds.outerRadius * dpmm);
+            const roPx = bounds.outerRadius * dpmm;
             if (typeof ctx.roundRect === 'function') {
               ctx.roundRect(oPx, oPy, oPw, oPh, roPx);
+              ctx.roundRect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm, clampedRadius * dpmm);
             } else {
               ctx.rect(oPx, oPy, oPw, oPh);
+              ctx.rect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm);
             }
           } else {
             ctx.rect(oPx, oPy, oPw, oPh);
+            ctx.rect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm);
           }
-          ctx.fill();
+          ctx.fill('evenodd');
         }
         ctx.restore();
       }
     }
 
     // FR-001, FR-004: Изображение наклейки выводится строго по контуру реза 1:1 без растяжения
-    const px = Math.round(pos.xMm * dpmm);
-    const py = Math.round(pos.yMm * dpmm);
-    const pw = Math.round(pos.widthMm * dpmm);
-    const ph = Math.round(pos.heightMm * dpmm);
+    // Общие дробные координаты изображения и вылета исключают сдвиг на полпикселя.
+    const px = pos.xMm * dpmm;
+    const py = pos.yMm * dpmm;
+    const pw = pos.widthMm * dpmm;
+    const ph = pos.heightMm * dpmm;
 
     if (imgToDraw) {
       if (stickerShape === 'circle') {
@@ -153,7 +170,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
       } else if (stickerShape === 'rounded') {
         ctx.save();
         ctx.beginPath();
-        const rPx = Math.round(clampedRadius * dpmm);
+        const rPx = clampedRadius * dpmm;
         if (typeof ctx.roundRect === 'function') {
           ctx.roundRect(px, py, pw, ph, rPx);
         } else {
@@ -164,6 +181,20 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
         ctx.restore();
       } else {
         ctx.drawImage(imgToDraw, px, py, pw, ph);
+      }
+
+      if (edgeMask) {
+        ctx.save();
+        ctx.scale(dpmm, dpmm);
+        ctx.translate(pos.xMm, pos.yMm);
+        const outerPath = getBleedOuterSvgPath({
+          xMm: 0, yMm: 0, widthMm: pos.widthMm, heightMm: pos.heightMm,
+          bleedMm, shape: stickerShape, cornerRadiusMm: clampedRadius,
+        });
+        ctx.clip(new Path2D(outerPath));
+        ctx.fillStyle = normalizeHexColor(bleedColor);
+        ctx.fill(edgeMask);
+        ctx.restore();
       }
     } else {
       // Отрисовка плейсхолдера для пустого стикера

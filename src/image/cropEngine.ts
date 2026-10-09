@@ -1,3 +1,5 @@
+import { createEdgeFillPath, EdgeFillGeometry } from './edgeBackground';
+
 export interface CropData {
   x: number;
   y: number;
@@ -16,6 +18,8 @@ export interface CroppedResult {
   mimeType: string;
   pixelWidth: number;
   pixelHeight: number;
+  /** Маска светлой каймы в координатах готовой наклейки (мм). */
+  edgeFillPath?: string;
 }
 
 /**
@@ -63,7 +67,8 @@ export async function renderCroppedArtwork(
   sizingMode: SizingMode,
   aspectRatio: number, // targetWidth / targetHeight
   originalMimeType: string,
-  sheetRotation: 0 | 90 = 0
+  sheetRotation: 0 | 90 = 0,
+  edgeFillGeometry?: EdgeFillGeometry
 ): Promise<CroppedResult> {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { alpha: true });
@@ -148,6 +153,7 @@ export async function renderCroppedArtwork(
     drawRotatedImage(ctx, sourceImage, cropX, cropY, cropW, cropH, destX, destY, cropW, cropH, rotate);
 
     const finalCanvas = sheetRotation === 90 ? applySheetRotation(canvas) : canvas;
+    const edgeFillPath = edgeFillGeometry ? getCanvasEdgeFillPath(finalCanvas, edgeFillGeometry) : undefined;
     const mimeType = 'image/png'; // PNG для сохранения прозрачных полей Fit
     const blob = await canvasToBlob(finalCanvas, mimeType);
     const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -169,6 +175,7 @@ export async function renderCroppedArtwork(
       mimeType,
       pixelWidth: finalCanvas.width,
       pixelHeight: finalCanvas.height,
+      edgeFillPath,
     };
   } else {
     // Режим Crop / Fill: холст равен точно размеру кадрированной области
@@ -179,9 +186,10 @@ export async function renderCroppedArtwork(
     drawRotatedImage(ctx, sourceImage, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH, rotate);
 
     const finalCanvas = sheetRotation === 90 ? applySheetRotation(canvas) : canvas;
+    const edgeFillPath = edgeFillGeometry ? getCanvasEdgeFillPath(finalCanvas, edgeFillGeometry) : undefined;
 
     // Сохраняем исходный формат или PNG
-    const mimeType = originalMimeType.includes('jpeg') || originalMimeType.includes('jpg')
+    const mimeType = !edgeFillPath && (originalMimeType.includes('jpeg') || originalMimeType.includes('jpg'))
       ? 'image/jpeg'
       : 'image/png';
 
@@ -206,8 +214,17 @@ export async function renderCroppedArtwork(
       mimeType,
       pixelWidth: finalCanvas.width,
       pixelHeight: finalCanvas.height,
+      edgeFillPath,
     };
   }
+}
+
+/** Строит независимую от цвета маску один раз после кадрирования и поворота. */
+function getCanvasEdgeFillPath(canvas: HTMLCanvasElement, geometry: EdgeFillGeometry): string {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Не удалось прочитать изображение для исправления светлой каймы.');
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  return createEdgeFillPath(pixels.data, canvas.width, canvas.height, geometry);
 }
 
 /**

@@ -40,6 +40,7 @@ export interface AppSettings {
   cutSvgIncludeSheetBorder: boolean;
   bleedMm: number;
   bleedColor: string;
+  bleedEdgeCleanup: boolean;
   pngDpi: PngDpi;
 }
 
@@ -82,6 +83,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cutSvgIncludeSheetBorder: true,
   bleedMm: 0,
   bleedColor: '#FFFFFF',
+  bleedEdgeCleanup: true,
   pngDpi: 300,
 };
 
@@ -99,6 +101,8 @@ function loadSettings(): AppSettings {
         ...DEFAULT_SETTINGS,
         ...parsed,
         bleedColor,
+        bleedEdgeCleanup: typeof parsed.bleedEdgeCleanup === 'boolean'
+          ? parsed.bleedEdgeCleanup : DEFAULT_SETTINGS.bleedEdgeCleanup,
         margins: { ...DEFAULT_SETTINGS.margins, ...(parsed.margins || {}) },
         cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG, ...(parsed.cutMarks || {}) },
       };
@@ -155,6 +159,7 @@ export function saveSettings(settings: AppSettings): void {
       cutSvgIncludeSheetBorder: settings.cutSvgIncludeSheetBorder !== undefined ? Boolean(settings.cutSvgIncludeSheetBorder) : true,
       bleedMm: settings.bleedMm,
       bleedColor: normalizeHexColor(settings.bleedColor || '#FFFFFF'),
+      bleedEdgeCleanup: settings.bleedEdgeCleanup,
       pngDpi: settings.pngDpi || 300,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));

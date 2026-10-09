@@ -1,10 +1,13 @@
-import { PDFDocument, rgb } from 'pdf-lib';
+import {
+  PDFDocument, PDFPage, rgb, pushGraphicsState, popGraphicsState, clip, endPath,
+  rectangle, moveTo, lineTo, appendBezierCurve, closePath,
+} from 'pdf-lib';
 import { mmToPoints } from '../units/mm';
 import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, drawCutMarksOnPdf, generateCutMarks } from './cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
-import { getBleedOuterSvgPath, hexToRgb01, normalizeHexColor } from '../layout/bleedGeometry';
+import { BleedDimensions, getBleedBounds, getBleedDifferenceSvgPath, hexToRgb01, normalizeHexColor } from '../layout/bleedGeometry';
 
 export interface PdfExportOptions {
   pageWidthMm: number;
@@ -12,12 +15,49 @@ export interface PdfExportOptions {
   layout: LayoutResult;
   imageBytes?: Uint8Array;
   imageMimeType?: string;
+  edgeFillPath?: string;
   cutMarks?: CutMarksConfig;
   bleedMm?: number; // 0, 1, 2, 3 мм
   bleedColor?: string;
   stickerShape?: StickerShape;
   cornerRadiusMm?: number;
   registrationMarks?: boolean;
+}
+
+/** Ограничивает маску каймы внешним контуром вылета в координатах PDF. */
+function clipToBleed(page: PDFPage, dims: BleedDimensions, pageHeightPt: number): void {
+  const bounds = getBleedBounds(dims);
+  let x = mmToPoints(bounds.outerX);
+  let y = pageHeightPt - mmToPoints(bounds.outerY + bounds.outerHeight);
+  let width = mmToPoints(bounds.outerWidth);
+  let height = mmToPoints(bounds.outerHeight);
+  const radius = mmToPoints(bounds.outerRadius);
+  if (dims.shape === 'circle') {
+    width = height = radius * 2;
+    x = mmToPoints(dims.xMm + dims.widthMm / 2) - radius;
+    y = pageHeightPt - mmToPoints(dims.yMm + dims.heightMm / 2) - radius;
+  }
+
+  if (dims.shape === 'rect' || radius === 0) {
+    page.pushOperators(rectangle(x, y, width, height), clip(), endPath());
+    return;
+  }
+
+  // Кубические дуги совпадают с маской круглой/скруглённой наклейки.
+  const k = radius * 0.5522847498307936;
+  const right = x + width;
+  const top = y + height;
+  page.pushOperators(
+    moveTo(x + radius, y), lineTo(right - radius, y),
+    appendBezierCurve(right - radius + k, y, right, y + radius - k, right, y + radius),
+    lineTo(right, top - radius),
+    appendBezierCurve(right, top - radius + k, right - radius + k, top, right - radius, top),
+    lineTo(x + radius, top),
+    appendBezierCurve(x + radius - k, top, x, top - radius + k, x, top - radius),
+    lineTo(x, y + radius),
+    appendBezierCurve(x, y + radius - k, x + radius - k, y, x + radius, y),
+    closePath(), clip(), endPath(),
+  );
 }
 
 /**
@@ -115,6 +155,7 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
     layout,
     imageBytes,
     imageMimeType,
+    edgeFillPath,
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
     bleedColor = '#FFFFFF',
@@ -165,10 +206,10 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
 
   // Отрисовка каждого стикера из рассчитанной сетки layoutEngine
   for (const pos of layout.positions) {
-    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0, монолитная подложка)
+    // Кольцо вылета сохраняет прозрачные участки и поля Fit внутри наклейки.
     if (bleedMm > 0) {
       const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
-      const bleedPath = getBleedOuterSvgPath({
+      const bleedPath = getBleedDifferenceSvgPath({
         xMm: pos.xMm,
         yMm: pos.yMm,
         widthMm: pos.widthMm,
@@ -201,6 +242,18 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
         width: wPt,
         height: hPt,
       });
+      if (bleedMm > 0 && edgeFillPath) {
+        page.pushOperators(pushGraphicsState());
+        clipToBleed(page, {
+          xMm: pos.xMm, yMm: pos.yMm, widthMm: pos.widthMm, heightMm: pos.heightMm,
+          bleedMm, shape: stickerShape, cornerRadiusMm,
+        }, pageHeightPt);
+        page.drawSvgPath(edgeFillPath, {
+          x: xPt, y: pageHeightPt - mmToPoints(pos.yMm),
+          scale: ptPerMm, color: pdfBleedColor,
+        });
+        page.pushOperators(popGraphicsState());
+      }
     }
   }
 
