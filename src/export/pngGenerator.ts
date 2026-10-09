@@ -2,7 +2,7 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, generateCutMarks } from '../pdf/cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from './svgCutGenerator';
-import { getBleedDifferenceSvgPath, normalizeHexColor, getBleedBounds } from '../layout/bleedGeometry';
+import { getBleedOuterSvgPath, normalizeHexColor, getBleedBounds } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PngExportOptions {
@@ -76,10 +76,10 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
   for (const pos of layout.positions) {
     const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
 
-    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0)
+    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0, монолитная подложка)
     if (bleedMm > 0) {
       const color = normalizeHexColor(bleedColor);
-      const bleedPathStr = getBleedDifferenceSvgPath({
+      const bleedPathStr = getBleedOuterSvgPath({
         xMm: pos.xMm,
         yMm: pos.yMm,
         widthMm: pos.widthMm,
@@ -95,7 +95,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
           ctx.scale(dpmm, dpmm);
           const p2d = new Path2D(bleedPathStr);
           ctx.fillStyle = color;
-          ctx.fill(p2d, 'evenodd');
+          ctx.fill(p2d);
         } else {
           // Фоллбэк для тестовых сред без полной реализации Path2D
           const bounds = getBleedBounds({
@@ -111,16 +111,25 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
           const oPy = Math.round(bounds.outerY * dpmm);
           const oPw = Math.round(bounds.outerWidth * dpmm);
           const oPh = Math.round(bounds.outerHeight * dpmm);
-          const inPx = Math.round(pos.xMm * dpmm);
-          const inPy = Math.round(pos.yMm * dpmm);
-          const inPw = Math.round(pos.widthMm * dpmm);
-          const inPh = Math.round(pos.heightMm * dpmm);
 
           ctx.fillStyle = color;
           ctx.beginPath();
-          ctx.rect(oPx, oPy, oPw, oPh);
-          ctx.rect(inPx + inPw, inPy, -inPw, inPh);
-          ctx.fill('evenodd');
+          if (stickerShape === 'circle') {
+            const cx = Math.round((pos.xMm + pos.widthMm / 2) * dpmm);
+            const cy = Math.round((pos.yMm + pos.heightMm / 2) * dpmm);
+            const r = Math.round(bounds.outerRadius * dpmm);
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          } else if (stickerShape === 'rounded') {
+            const roPx = Math.round(bounds.outerRadius * dpmm);
+            if (typeof ctx.roundRect === 'function') {
+              ctx.roundRect(oPx, oPy, oPw, oPh, roPx);
+            } else {
+              ctx.rect(oPx, oPy, oPw, oPh);
+            }
+          } else {
+            ctx.rect(oPx, oPy, oPw, oPh);
+          }
+          ctx.fill();
         }
         ctx.restore();
       }

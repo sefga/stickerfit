@@ -4,7 +4,7 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, drawCutMarksOnPdf, generateCutMarks } from './cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
-import { getBleedDifferenceSvgPath, hexToRgb01, normalizeHexColor } from '../layout/bleedGeometry';
+import { getBleedOuterSvgPath, hexToRgb01, normalizeHexColor } from '../layout/bleedGeometry';
 
 export interface PdfExportOptions {
   pageWidthMm: number;
@@ -165,10 +165,10 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
 
   // Отрисовка каждого стикера из рассчитанной сетки layoutEngine
   for (const pos of layout.positions) {
-    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0)
+    // FR-005, FR-008: Отрисовка внешнего цветного вылета под обрез (если bleedMm > 0, монолитная подложка)
     if (bleedMm > 0) {
       const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
-      const bleedPath = getBleedDifferenceSvgPath({
+      const bleedPath = getBleedOuterSvgPath({
         xMm: pos.xMm,
         yMm: pos.yMm,
         widthMm: pos.widthMm,

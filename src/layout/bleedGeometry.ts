@@ -169,3 +169,41 @@ export function getBleedDifferenceSvgPath(dims: BleedDimensions): string {
 
   return `${outerPath} ${innerPath}`;
 }
+
+/**
+ * Генерация сплошного внешнего пути вылета (монолитная бесшовная подложка).
+ * Исключает возникновение любых зазоров или субпиксельных щелей между
+ * изображением стикера и вылетом.
+ */
+export function getBleedOuterSvgPath(dims: BleedDimensions): string {
+  const { xMm, yMm, widthMm, heightMm, bleedMm, shape } = dims;
+  if (bleedMm <= 0) return '';
+
+  const bounds = getBleedBounds(dims);
+  const { outerX, outerY, outerWidth, outerHeight, outerRadius } = bounds;
+
+  if (shape === 'rect') {
+    return `M ${outerX} ${outerY} H ${outerX + outerWidth} V ${outerY + outerHeight} H ${outerX} Z`;
+  }
+
+  if (shape === 'circle') {
+    const cx = roundMm(xMm + widthMm / 2, 3);
+    const cy = roundMm(yMm + heightMm / 2, 3);
+    return `M ${roundMm(cx - outerRadius, 3)} ${cy} ` +
+      `A ${outerRadius} ${outerRadius} 0 1 1 ${roundMm(cx + outerRadius, 3)} ${cy} ` +
+      `A ${outerRadius} ${outerRadius} 0 1 1 ${roundMm(cx - outerRadius, 3)} ${cy} Z`;
+  }
+
+  // shape === 'rounded'
+  const ro = outerRadius;
+  return `M ${roundMm(outerX + ro, 3)} ${outerY} ` +
+    `H ${roundMm(outerX + outerWidth - ro, 3)} ` +
+    `A ${ro} ${ro} 0 0 1 ${roundMm(outerX + outerWidth, 3)} ${roundMm(outerY + ro, 3)} ` +
+    `V ${roundMm(outerY + outerHeight - ro, 3)} ` +
+    `A ${ro} ${ro} 0 0 1 ${roundMm(outerX + outerWidth - ro, 3)} ${roundMm(outerY + outerHeight, 3)} ` +
+    `H ${roundMm(outerX + ro, 3)} ` +
+    `A ${ro} ${ro} 0 0 1 ${outerX} ${roundMm(outerY + outerHeight - ro, 3)} ` +
+    `V ${roundMm(outerY + ro, 3)} ` +
+    `A ${ro} ${ro} 0 0 1 ${roundMm(outerX + ro, 3)} ${outerY} Z`;
+}
+

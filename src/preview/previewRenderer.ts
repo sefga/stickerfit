@@ -4,7 +4,7 @@ import { Margins } from '../layout/layoutEngine';
 import { SizingMode } from '../image/cropEngine';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
-import { getBleedDifferenceSvgPath, normalizeHexColor } from '../layout/bleedGeometry';
+import { getBleedOuterSvgPath, normalizeHexColor } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PreviewOptions {
@@ -142,10 +142,10 @@ export function renderPreviewSvg(options: PreviewOptions): string {
   visiblePositions.forEach((pos, idx) => {
     const { xMm, yMm, widthMm, heightMm } = pos;
 
-    // FR-008: Внешний цветной вылет под обрез реальным цветом bleedColor
+    // FR-008: Внешний цветной вылет под обрез реальным цветом bleedColor (монолитная бесшовная подложка)
     if (bleedMm > 0) {
       const color = normalizeHexColor(bleedColor);
-      const bleedPath = getBleedDifferenceSvgPath({
+      const bleedPath = getBleedOuterSvgPath({
         xMm,
         yMm,
         widthMm,
@@ -157,7 +157,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
 
       if (bleedPath) {
         svgParts.push(
-          `<path d="${bleedPath}" fill="${color}" fill-rule="evenodd" stroke="#cbd5e1" stroke-width="0.12" />`
+          `<path d="${bleedPath}" fill="${color}" stroke="none" />`
         );
       }
     }

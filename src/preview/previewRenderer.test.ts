@@ -56,7 +56,8 @@ describe('previewRenderer', () => {
     });
 
     expect(svg).toContain('fill="#3B82F6"');
-    expect(svg).toContain('fill-rule="evenodd"');
+    expect(svg).toContain('stroke="none"');
+    expect(svg).not.toContain('#cbd5e1" stroke-width="0.12"');
     expect(svg).not.toContain('#fef3c7');
   });
 
@@ -85,6 +86,6 @@ describe('previewRenderer', () => {
     });
 
     expect(svg).toContain('fill="#10B981"');
-    expect(svg).toContain('fill-rule="evenodd"');
+    expect(svg).toContain('stroke="none"');
   });
 });

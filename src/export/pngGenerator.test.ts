@@ -224,7 +224,7 @@ describe('PNG Export Generator (300 DPI Lossless)', () => {
       expect(blob).toBeDefined();
       expect(mockCtx.save).toHaveBeenCalled();
       expect(mockCtx.restore).toHaveBeenCalled();
-      expect(mockCtx.fill).toHaveBeenCalledWith('evenodd');
+      expect(mockCtx.fill).toHaveBeenCalled();
     } finally {
       globalThis.document = originalDocument;
     }

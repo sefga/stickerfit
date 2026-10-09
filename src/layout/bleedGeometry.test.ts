@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getBleedBounds,
   getBleedDifferenceSvgPath,
+  getBleedOuterSvgPath,
   isValidHexColor,
   normalizeHexColor,
   hexToRgb01,
@@ -129,6 +130,62 @@ describe('bleedGeometry', () => {
 
       expect(path).toContain('A 6 6 0 0 1');
       expect(path).toContain('A 5 5 0 0 0');
+    });
+  });
+
+  describe('getBleedOuterSvgPath', () => {
+    it('возвращает пустую строку при нулевом вылете', () => {
+      const path = getBleedOuterSvgPath({
+        xMm: 10,
+        yMm: 10,
+        widthMm: 50,
+        heightMm: 50,
+        bleedMm: 0,
+        shape: 'rect',
+      });
+      expect(path).toBe('');
+    });
+
+    it('формирует сплошной внешний прямоугольник без внутренних вырезов', () => {
+      const path = getBleedOuterSvgPath({
+        xMm: 10,
+        yMm: 20,
+        widthMm: 50,
+        heightMm: 50,
+        bleedMm: 1,
+        shape: 'rect',
+      });
+
+      expect(path).toBe('M 9 19 H 61 V 71 H 9 Z');
+    });
+
+    it('формирует сплошной внешний круг без внутренней дырки', () => {
+      const path = getBleedOuterSvgPath({
+        xMm: 0,
+        yMm: 0,
+        widthMm: 50,
+        heightMm: 50,
+        bleedMm: 2,
+        shape: 'circle',
+      });
+
+      expect(path).toContain('A 27 27 0 1 1');
+      expect(path).not.toContain('A 25'); // Нет внутреннего выреза
+    });
+
+    it('формирует сплошной внешний скругленный прямоугольник', () => {
+      const path = getBleedOuterSvgPath({
+        xMm: 10,
+        yMm: 10,
+        widthMm: 40,
+        heightMm: 40,
+        bleedMm: 1,
+        shape: 'rounded',
+        cornerRadiusMm: 5,
+      });
+
+      expect(path).toContain('A 6 6 0 0 1');
+      expect(path).not.toContain('A 5 5'); // Нет внутреннего выреза
     });
   });
 
