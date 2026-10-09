@@ -207,3 +207,49 @@ export function getBleedOuterSvgPath(dims: BleedDimensions): string {
     `A ${ro} ${ro} 0 0 1 ${roundMm(outerX + ro, 3)} ${outerY} Z`;
 }
 
+/**
+ * Генерация точного замкнутого векторного контура стикера 1:1 в миллиметрах
+ * для плоттерной контурной резки (CutContour в PDF и SVG).
+ */
+export function getStickerContourSvgPath(dims: {
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  heightMm: number;
+  shape: BleedShape;
+  cornerRadiusMm?: number;
+}): string {
+  const { xMm, yMm, widthMm, heightMm, shape, cornerRadiusMm = 0 } = dims;
+
+  if (shape === 'circle') {
+    const d = Math.min(widthMm, heightMm);
+    const r = roundMm(d / 2, 3);
+    const cx = roundMm(xMm + widthMm / 2, 3);
+    const cy = roundMm(yMm + heightMm / 2, 3);
+    return `M ${roundMm(cx - r, 3)} ${cy} ` +
+      `A ${r} ${r} 0 1 1 ${roundMm(cx + r, 3)} ${cy} ` +
+      `A ${r} ${r} 0 1 1 ${roundMm(cx - r, 3)} ${cy} Z`;
+  }
+
+  if (shape === 'rounded') {
+    const maxR = Math.min(widthMm / 2, heightMm / 2);
+    const r = roundMm(Math.min(Math.max(0, cornerRadiusMm), maxR), 3);
+    if (r === 0) {
+      return `M ${roundMm(xMm, 3)} ${roundMm(yMm, 3)} H ${roundMm(xMm + widthMm, 3)} V ${roundMm(yMm + heightMm, 3)} H ${roundMm(xMm, 3)} Z`;
+    }
+    return `M ${roundMm(xMm + r, 3)} ${roundMm(yMm, 3)} ` +
+      `H ${roundMm(xMm + widthMm - r, 3)} ` +
+      `A ${r} ${r} 0 0 1 ${roundMm(xMm + widthMm, 3)} ${roundMm(yMm + r, 3)} ` +
+      `V ${roundMm(yMm + heightMm - r, 3)} ` +
+      `A ${r} ${r} 0 0 1 ${roundMm(xMm + widthMm - r, 3)} ${roundMm(yMm + heightMm, 3)} ` +
+      `H ${roundMm(xMm + r, 3)} ` +
+      `A ${r} ${r} 0 0 1 ${roundMm(xMm, 3)} ${roundMm(yMm + heightMm - r, 3)} ` +
+      `V ${roundMm(yMm + r, 3)} ` +
+      `A ${r} ${r} 0 0 1 ${roundMm(xMm + r, 3)} ${roundMm(yMm, 3)} Z`;
+  }
+
+  // shape === 'rect'
+  return `M ${roundMm(xMm, 3)} ${roundMm(yMm, 3)} H ${roundMm(xMm + widthMm, 3)} V ${roundMm(yMm + heightMm, 3)} H ${roundMm(xMm, 3)} Z`;
+}
+
+

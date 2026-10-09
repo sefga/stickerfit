@@ -38,6 +38,7 @@ export interface AppSettings {
   registrationMarks: boolean;
   cutSvgIncludeMarks: boolean;
   cutSvgIncludeSheetBorder: boolean;
+  pdfIncludeCutContour: boolean;
   bleedMm: number;
   bleedColor: string;
   bleedEdgeCleanup: boolean;
@@ -81,6 +82,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   registrationMarks: false,
   cutSvgIncludeMarks: false,
   cutSvgIncludeSheetBorder: true,
+  pdfIncludeCutContour: true,
   bleedMm: 0,
   bleedColor: '#FFFFFF',
   bleedEdgeCleanup: true,
@@ -157,6 +159,7 @@ export function saveSettings(settings: AppSettings): void {
       registrationMarks: Boolean(settings.registrationMarks),
       cutSvgIncludeMarks: Boolean(settings.cutSvgIncludeMarks),
       cutSvgIncludeSheetBorder: settings.cutSvgIncludeSheetBorder !== undefined ? Boolean(settings.cutSvgIncludeSheetBorder) : true,
+      pdfIncludeCutContour: settings.pdfIncludeCutContour !== undefined ? Boolean(settings.pdfIncludeCutContour) : true,
       bleedMm: settings.bleedMm,
       bleedColor: normalizeHexColor(settings.bleedColor || '#FFFFFF'),
       bleedEdgeCleanup: settings.bleedEdgeCleanup,

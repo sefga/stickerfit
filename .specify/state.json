@@ -1,44 +1,31 @@
 {
   "active": false,
-  "taskScope": "Реализовать в StickerFit цветной внешний вылет под обрез с сохранением точного размера наклейки, защитой от наложения соседних вылетов и одинаковой геометрией предпросмотра и экспорта.",
+  "taskScope": "Исключить лишний внешний контур вылета и прямоугольные рамки при экспорте PDF, запекать вылет в растровое изображение наклейки и экспортировать только чистый внутренний векторный контур реза для Easy Cut Studio (Print & Cut)",
   "phase": "DONE",
   "allowedFiles": [
-    "src/layout/bleedGeometry.ts",
-    "src/layout/bleedGeometry.test.ts",
-    "src/layout/layoutEngine.ts",
-    "src/layout/layoutEngine.test.ts",
     "src/state.ts",
-    "src/preview/previewRenderer.ts",
-    "src/preview/previewRenderer.test.ts",
+    "src/i18n.ts",
+    "src/layout/bleedGeometry.ts",
     "src/pdf/pdfGenerator.ts",
     "src/pdf/pdfGenerator.test.ts",
-    "src/export/pngGenerator.ts",
-    "src/export/pngGenerator.test.ts",
-    "src/export/svgCutGenerator.ts",
-    "src/export/svgCutGenerator.test.ts",
-    "src/ui/eyedropper.ts",
     "src/ui/controls.ts",
-    "src/styles.css",
-    "src/i18n.ts",
-    "src/i18n.test.ts",
     "index.html",
-    "tests/printCorrectness.test.ts",
-    "tests/thermalRollLength.test.ts",
-    "specs/005-color-bleed-margin/spec.md",
-    "specs/005-color-bleed-margin/plan.md",
-    "specs/005-color-bleed-margin/checklists/requirements.md",
-    "specs/005-color-bleed-margin/tasks.md",
+    "specs/006-pdf-clean-cut-contour/spec.md",
+    "specs/006-pdf-clean-cut-contour/plan.md",
+    "specs/006-pdf-clean-cut-contour/tasks.md",
+    "specs/006-pdf-clean-cut-contour/checklists/requirements.md",
     ".specify/feature.json",
-    ".specify/state.json"
+    ".specify/state.json",
+    ".specify/IMPLEMENTATION_GATE.md"
   ],
   "verificationRequired": [
     "npm run test",
     "npm run build"
   ],
   "verificationEvidence": {
-    "vitest": "18 test files passed (148 tests passed)",
-    "build": "tsc && vite build completed with 0 errors in 3.00s"
+    "vitest": "19 test files passed (163 tests passed)",
+    "build": "tsc && vite build completed in 6.15s with 0 errors"
   },
-  "tasksCompleted": 12,
-  "tasksTotal": 12
+  "tasksCompleted": 11,
+  "tasksTotal": 11
 }

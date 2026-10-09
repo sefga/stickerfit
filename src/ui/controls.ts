@@ -719,6 +719,11 @@ export class UIController {
       store.update({ cutSvgIncludeSheetBorder: cutSvgSheetBorderToggle.checked });
     });
 
+    const pdfCutContourToggle = document.getElementById('pdfIncludeCutContour') as HTMLInputElement;
+    pdfCutContourToggle?.addEventListener('change', () => {
+      store.update({ pdfIncludeCutContour: pdfCutContourToggle.checked });
+    });
+
     document.getElementById('btnDownloadTemplateSvg')?.addEventListener('click', () => {
       this.handleDownloadTemplateSvg();
     });
@@ -1141,6 +1146,7 @@ export class UIController {
       stickerShape: state.stickerShape,
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
+      includeCutContour: state.pdfIncludeCutContour !== undefined ? Boolean(state.pdfIncludeCutContour) : true,
     });
 
     const formatName = state.paperFormatId.toLowerCase();
@@ -1309,6 +1315,7 @@ export class UIController {
       stickerShape: state.stickerShape,
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
+      includeCutContour: state.pdfIncludeCutContour !== undefined ? Boolean(state.pdfIncludeCutContour) : true,
     });
 
     openPdfForPrint(pdfBytes);
@@ -1583,6 +1590,7 @@ export class UIController {
     setChecked('registrationMarksEnabled', Boolean(state.registrationMarks));
     setChecked('cutSvgIncludeMarks', Boolean(state.cutSvgIncludeMarks));
     setChecked('cutSvgIncludeSheetBorder', state.cutSvgIncludeSheetBorder !== undefined ? Boolean(state.cutSvgIncludeSheetBorder) : true);
+    setChecked('pdfIncludeCutContour', state.pdfIncludeCutContour !== undefined ? Boolean(state.pdfIncludeCutContour) : true);
 
     // Обновление карточки калибровки меток и расстояний для проверки линейкой
     const regMarksCard = document.getElementById('regMarksCalibrationCard');
