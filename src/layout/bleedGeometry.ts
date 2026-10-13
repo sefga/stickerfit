@@ -252,4 +252,77 @@ export function getStickerContourSvgPath(dims: {
   return `M ${roundMm(xMm, 3)} ${roundMm(yMm, 3)} H ${roundMm(xMm + widthMm, 3)} V ${roundMm(yMm + heightMm, 3)} H ${roundMm(xMm, 3)} Z`;
 }
 
+export interface InnerArtBounds {
+  /** Величина сжатия с каждой стороны в мм */
+  insetMm: number;
+  /** Внутреннее смещение по X относительно левого верхнего угла стикера (0, 0) */
+  innerX: number;
+  /** Внутреннее смещение по Y относительно левого верхнего угла стикера (0, 0) */
+  innerY: number;
+  /** Результирующая ширина сжатой области изображения */
+  innerWidth: number;
+  /** Результирующая высота сжатой области изображения */
+  innerHeight: number;
+  /** Радиус скругления или радиус круга для маски сжатого изображения */
+  innerRadius: number;
+}
+
+/**
+ * Расчет смещений и габаритов сжатого изображения стикера при центрированном ободе
+ * (когда линия реза проходит посередине защитного контура).
+ *
+ * Если bleedCenterCut = true и bleedMm > 0, картинка пропорционально сжимается внутрь
+ * на величину вылета bleedMm (с защитным лимитом не более 40% от минимального габарита,
+ * чтобы площадь арта не сжималась менее чем до 20% от исходного размера).
+ */
+export function getInnerArtBounds(
+  widthMm: number,
+  heightMm: number,
+  bleedMm: number,
+  shape: BleedShape,
+  bleedCenterCut: boolean,
+  cornerRadiusMm: number = 0
+): InnerArtBounds {
+  const minDim = Math.min(widthMm, heightMm);
+  const baseRadius = shape === 'circle'
+    ? roundMm(minDim / 2, 3)
+    : roundMm(Math.min(Math.max(0, cornerRadiusMm), minDim / 2), 3);
+
+  if (!bleedCenterCut || bleedMm <= 0 || widthMm <= 0 || heightMm <= 0) {
+    return {
+      insetMm: 0,
+      innerX: 0,
+      innerY: 0,
+      innerWidth: roundMm(widthMm, 3),
+      innerHeight: roundMm(heightMm, 3),
+      innerRadius: baseRadius,
+    };
+  }
+
+  // Лимит инсета: не более 40% от меньшей стороны, чтобы картинка не схлопывалась
+  const maxInset = roundMm(minDim * 0.4, 3);
+  const insetMm = roundMm(Math.min(Math.max(0, bleedMm), maxInset), 3);
+
+  const innerWidth = roundMm(widthMm - 2 * insetMm, 3);
+  const innerHeight = roundMm(heightMm - 2 * insetMm, 3);
+  const innerMinDim = Math.min(innerWidth, innerHeight);
+
+  let innerRadius = 0;
+  if (shape === 'circle') {
+    innerRadius = roundMm(innerMinDim / 2, 3);
+  } else if (shape === 'rounded') {
+    const rawR = Math.max(0, cornerRadiusMm - insetMm);
+    innerRadius = roundMm(Math.min(rawR, innerMinDim / 2), 3);
+  }
+
+  return {
+    insetMm,
+    innerX: insetMm,
+    innerY: insetMm,
+    innerWidth,
+    innerHeight,
+    innerRadius,
+  };
+}
+
 

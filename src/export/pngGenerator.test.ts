@@ -229,4 +229,82 @@ describe('PNG Export Generator (300 DPI Lossless)', () => {
       globalThis.document = originalDocument;
     }
   });
+
+  it('Корректно генерирует PNG при включенном bleedCenterCut: true', async () => {
+    const layout = calculateLayout({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 10, bottom: 10, left: 10, right: 10 },
+      gapX: 4,
+      gapY: 4,
+      allowRotation: false,
+      bleedMm: 2,
+    });
+
+    const mockCtx = {
+      fillStyle: '',
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      drawImage: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+      clip: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      scale: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillText: vi.fn(),
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: '',
+      font: '',
+      textAlign: '',
+      textBaseline: '',
+      lineWidth: 1,
+      strokeStyle: '',
+    };
+
+    const mockCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(mockCtx),
+      toBlob: vi.fn((cb: (blob: Blob) => void) => {
+        cb(new Blob(['png-bytes'], { type: 'image/png' }));
+      }),
+    };
+
+    const originalDocument = globalThis.document;
+    globalThis.document = {
+      createElement: vi.fn().mockImplementation((tag: string) => {
+        if (tag === 'canvas') return mockCanvas;
+        return originalDocument?.createElement?.(tag);
+      }),
+    } as any;
+
+    try {
+      const dummyImg = { naturalWidth: 100, naturalHeight: 100 } as any;
+      const blob = await generateStickerSheetPng({
+        pageWidthMm: A4_WIDTH_MM,
+        pageHeightMm: A4_HEIGHT_MM,
+        layout,
+        imageElement: dummyImg,
+        bleedMm: 2,
+        bleedColor: '#3B82F6',
+        bleedCenterCut: true,
+        stickerShape: 'circle',
+      });
+
+      expect(blob).toBeDefined();
+      expect(mockCtx.drawImage).toHaveBeenCalled();
+      expect(mockCtx.fill).toHaveBeenCalled();
+      expect(mockCtx.clip).toHaveBeenCalled();
+    } finally {
+      globalThis.document = originalDocument;
+    }
+  });
 });

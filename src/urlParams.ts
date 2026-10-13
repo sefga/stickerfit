@@ -232,6 +232,21 @@ export function parseUrlSettings(queryString: string): Partial<AppSettings> {
     }
   }
 
+  // 8.2 Рез по центру обода (bleedCenterCut)
+  for (const key of ['bleedCenterCut', 'centerCut', 'rimCut']) {
+    const raw = params.get(key);
+    if (raw) {
+      const lower = raw.trim().toLowerCase();
+      if (['true', '1', 'yes', 'on'].includes(lower)) {
+        patch.bleedCenterCut = true;
+        break;
+      } else if (['false', '0', 'no', 'off'].includes(lower)) {
+        patch.bleedCenterCut = false;
+        break;
+      }
+    }
+  }
+
   // 9. Форма стикера (shape: rect | circle | rounded)
   for (const key of ['shape', 'stickerShape', 'form']) {
     const raw = params.get(key);

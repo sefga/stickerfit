@@ -134,4 +134,30 @@ describe('svgCutGenerator', () => {
     expect(svg).toContain('<g id="CutContour" stroke="#ff0000" stroke-width="0.1" fill="none">');
     expect(svg).not.toContain('fill-rule="evenodd"');
   });
+
+  it('AC-02: плоттерный контур реза круга остается строго r=D/2 (25.000 мм для диаметра 50 мм) при вылете bleedMm > 0', () => {
+    const layout = calculateLayout({
+      pageWidthMm: 210,
+      pageHeightMm: 297,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 5, bottom: 5, left: 5, right: 5 },
+      gapX: 2,
+      gapY: 2,
+      allowRotation: false,
+      bleedMm: 2,
+    });
+
+    const svg = generateStickerCutSvg({
+      pageWidthMm: 210,
+      pageHeightMm: 297,
+      layout,
+      shape: 'circle',
+    });
+
+    // Круг режется строго r=25.000 (а не 27.000 с внешним вылетом и не 23.000 со сжатым изображением)
+    expect(svg).toContain('r="25.000"');
+    expect(svg).not.toContain('r="27.000"');
+    expect(svg).not.toContain('r="23.000"');
+  });
 });

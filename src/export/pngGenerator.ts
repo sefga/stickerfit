@@ -2,7 +2,7 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, generateCutMarks } from '../pdf/cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from './svgCutGenerator';
-import { getBleedDifferenceSvgPath, getBleedOuterSvgPath, normalizeHexColor, getBleedBounds } from '../layout/bleedGeometry';
+import { getBleedDifferenceSvgPath, getBleedOuterSvgPath, normalizeHexColor, getBleedBounds, getInnerArtBounds } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PngExportOptions {
@@ -15,6 +15,7 @@ export interface PngExportOptions {
   cutMarks?: CutMarksConfig;
   bleedMm?: number;
   bleedColor?: string;
+  bleedCenterCut?: boolean;
   dpi?: number;
   stickerShape?: StickerShape;
   cornerRadiusMm?: number;
@@ -35,6 +36,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
     bleedColor = '#FFFFFF',
+    bleedCenterCut = false,
     dpi = 300,
     stickerShape = 'rect',
     cornerRadiusMm = 3,
@@ -86,77 +88,135 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
   // 3. Отрисовка каждого экземпляра наклейки
   for (const pos of layout.positions) {
     const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(pos.widthMm, pos.heightMm) / 2));
+    const artBounds = getInnerArtBounds(
+      pos.widthMm,
+      pos.heightMm,
+      bleedMm,
+      stickerShape,
+      Boolean(bleedCenterCut),
+      clampedRadius
+    );
 
-    // Кольцо вылета не закрашивает прозрачность и свободные поля внутри наклейки.
+    // Подложка вылета
     if (bleedMm > 0) {
       const color = normalizeHexColor(bleedColor);
-      const bleedPathStr = getBleedDifferenceSvgPath({
-        xMm: pos.xMm,
-        yMm: pos.yMm,
-        widthMm: pos.widthMm,
-        heightMm: pos.heightMm,
-        bleedMm,
-        shape: stickerShape,
-        cornerRadiusMm: clampedRadius,
-      });
 
-      if (bleedPathStr) {
-        ctx.save();
-        if (typeof Path2D !== 'undefined') {
-          ctx.scale(dpmm, dpmm);
-          const p2d = new Path2D(bleedPathStr);
-          ctx.fillStyle = color;
-          ctx.fill(p2d, 'evenodd');
-        } else {
-          // Фоллбэк для тестовых сред без полной реализации Path2D
-          const bounds = getBleedBounds({
-            xMm: pos.xMm,
-            yMm: pos.yMm,
-            widthMm: pos.widthMm,
-            heightMm: pos.heightMm,
-            bleedMm,
-            shape: stickerShape,
-            cornerRadiusMm: clampedRadius,
-          });
-          const oPx = bounds.outerX * dpmm;
-          const oPy = bounds.outerY * dpmm;
-          const oPw = bounds.outerWidth * dpmm;
-          const oPh = bounds.outerHeight * dpmm;
+      if (bleedCenterCut) {
+        // При центрированном ободе заливаем сплошную область вылета bleedColor
+        const outerPathStr = getBleedOuterSvgPath({
+          xMm: pos.xMm,
+          yMm: pos.yMm,
+          widthMm: pos.widthMm,
+          heightMm: pos.heightMm,
+          bleedMm,
+          shape: stickerShape,
+          cornerRadiusMm: clampedRadius,
+        });
 
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          if (stickerShape === 'circle') {
-            const cx = (pos.xMm + pos.widthMm / 2) * dpmm;
-            const cy = (pos.yMm + pos.heightMm / 2) * dpmm;
-            const r = bounds.outerRadius * dpmm;
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.moveTo(cx + bounds.innerRadius * dpmm, cy);
-            ctx.arc(cx, cy, bounds.innerRadius * dpmm, 0, Math.PI * 2);
-          } else if (stickerShape === 'rounded') {
-            const roPx = bounds.outerRadius * dpmm;
-            if (typeof ctx.roundRect === 'function') {
-              ctx.roundRect(oPx, oPy, oPw, oPh, roPx);
-              ctx.roundRect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm, clampedRadius * dpmm);
+        if (outerPathStr) {
+          ctx.save();
+          if (typeof Path2D !== 'undefined') {
+            ctx.scale(dpmm, dpmm);
+            const p2d = new Path2D(outerPathStr);
+            ctx.fillStyle = color;
+            ctx.fill(p2d);
+          } else {
+            const bounds = getBleedBounds({
+              xMm: pos.xMm,
+              yMm: pos.yMm,
+              widthMm: pos.widthMm,
+              heightMm: pos.heightMm,
+              bleedMm,
+              shape: stickerShape,
+              cornerRadiusMm: clampedRadius,
+            });
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            if (stickerShape === 'circle') {
+              const cx = (pos.xMm + pos.widthMm / 2) * dpmm;
+              const cy = (pos.yMm + pos.heightMm / 2) * dpmm;
+              const r = bounds.outerRadius * dpmm;
+              ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            } else {
+              const oPx = bounds.outerX * dpmm;
+              const oPy = bounds.outerY * dpmm;
+              const oPw = bounds.outerWidth * dpmm;
+              const oPh = bounds.outerHeight * dpmm;
+              ctx.rect(oPx, oPy, oPw, oPh);
+            }
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+      } else {
+        // Классический режим: кольцо вылета (разность)
+        const bleedPathStr = getBleedDifferenceSvgPath({
+          xMm: pos.xMm,
+          yMm: pos.yMm,
+          widthMm: pos.widthMm,
+          heightMm: pos.heightMm,
+          bleedMm,
+          shape: stickerShape,
+          cornerRadiusMm: clampedRadius,
+        });
+
+        if (bleedPathStr) {
+          ctx.save();
+          if (typeof Path2D !== 'undefined') {
+            ctx.scale(dpmm, dpmm);
+            const p2d = new Path2D(bleedPathStr);
+            ctx.fillStyle = color;
+            ctx.fill(p2d, 'evenodd');
+          } else {
+            // Фоллбэк для тестовых сред без полной реализации Path2D
+            const bounds = getBleedBounds({
+              xMm: pos.xMm,
+              yMm: pos.yMm,
+              widthMm: pos.widthMm,
+              heightMm: pos.heightMm,
+              bleedMm,
+              shape: stickerShape,
+              cornerRadiusMm: clampedRadius,
+            });
+            const oPx = bounds.outerX * dpmm;
+            const oPy = bounds.outerY * dpmm;
+            const oPw = bounds.outerWidth * dpmm;
+            const oPh = bounds.outerHeight * dpmm;
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            if (stickerShape === 'circle') {
+              const cx = (pos.xMm + pos.widthMm / 2) * dpmm;
+              const cy = (pos.yMm + pos.heightMm / 2) * dpmm;
+              const r = bounds.outerRadius * dpmm;
+              ctx.arc(cx, cy, r, 0, Math.PI * 2);
+              ctx.moveTo(cx + bounds.innerRadius * dpmm, cy);
+              ctx.arc(cx, cy, bounds.innerRadius * dpmm, 0, Math.PI * 2);
+            } else if (stickerShape === 'rounded') {
+              const roPx = bounds.outerRadius * dpmm;
+              if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(oPx, oPy, oPw, oPh, roPx);
+                ctx.roundRect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm, clampedRadius * dpmm);
+              } else {
+                ctx.rect(oPx, oPy, oPw, oPh);
+                ctx.rect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm);
+              }
             } else {
               ctx.rect(oPx, oPy, oPw, oPh);
               ctx.rect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm);
             }
-          } else {
-            ctx.rect(oPx, oPy, oPw, oPh);
-            ctx.rect(pos.xMm * dpmm, pos.yMm * dpmm, pos.widthMm * dpmm, pos.heightMm * dpmm);
+            ctx.fill('evenodd');
           }
-          ctx.fill('evenodd');
+          ctx.restore();
         }
-        ctx.restore();
       }
     }
 
-    // FR-001, FR-004: Изображение наклейки выводится строго по контуру реза 1:1 без растяжения
-    // Общие дробные координаты изображения и вылета исключают сдвиг на полпикселя.
-    const px = pos.xMm * dpmm;
-    const py = pos.yMm * dpmm;
-    const pw = pos.widthMm * dpmm;
-    const ph = pos.heightMm * dpmm;
+    // Изображение наклейки (сжатое при bleedCenterCut, номинальное при false)
+    const px = (pos.xMm + artBounds.innerX) * dpmm;
+    const py = (pos.yMm + artBounds.innerY) * dpmm;
+    const pw = artBounds.innerWidth * dpmm;
+    const ph = artBounds.innerHeight * dpmm;
 
     if (imgToDraw) {
       if (stickerShape === 'circle') {
@@ -170,7 +230,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
       } else if (stickerShape === 'rounded') {
         ctx.save();
         ctx.beginPath();
-        const rPx = clampedRadius * dpmm;
+        const rPx = artBounds.innerRadius * dpmm;
         if (typeof ctx.roundRect === 'function') {
           ctx.roundRect(px, py, pw, ph, rPx);
         } else {
@@ -183,7 +243,7 @@ export async function generateStickerSheetPng(options: PngExportOptions): Promis
         ctx.drawImage(imgToDraw, px, py, pw, ph);
       }
 
-      if (edgeMask) {
+      if (edgeMask && !bleedCenterCut) {
         ctx.save();
         ctx.scale(dpmm, dpmm);
         ctx.translate(pos.xMm, pos.yMm);

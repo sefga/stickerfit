@@ -6,6 +6,7 @@ import {
   isValidHexColor,
   normalizeHexColor,
   hexToRgb01,
+  getInnerArtBounds,
 } from './bleedGeometry';
 
 describe('bleedGeometry', () => {
@@ -220,6 +221,62 @@ describe('bleedGeometry', () => {
       expect(red.r).toBe(1);
       expect(red.g).toBe(0);
       expect(red.b).toBe(0);
+    });
+  });
+
+  describe('getInnerArtBounds', () => {
+    it('возвращает исходные габариты без сжатия при bleedCenterCut = false', () => {
+      const bounds = getInnerArtBounds(50, 50, 2, 'circle', false);
+      expect(bounds.insetMm).toBe(0);
+      expect(bounds.innerX).toBe(0);
+      expect(bounds.innerY).toBe(0);
+      expect(bounds.innerWidth).toBe(50);
+      expect(bounds.innerHeight).toBe(50);
+      expect(bounds.innerRadius).toBe(25);
+    });
+
+    it('возвращает исходные габариты без сжатия при bleedMm = 0 даже если bleedCenterCut = true', () => {
+      const bounds = getInnerArtBounds(50, 50, 0, 'circle', true);
+      expect(bounds.insetMm).toBe(0);
+      expect(bounds.innerWidth).toBe(50);
+      expect(bounds.innerHeight).toBe(50);
+      expect(bounds.innerRadius).toBe(25);
+    });
+
+    it('AC-01: для круга 50 мм и вылета 1 мм сжимает картинку на 1 мм (диаметр 48 мм, радиус 24 мм)', () => {
+      const bounds = getInnerArtBounds(50, 50, 1, 'circle', true);
+      expect(bounds.insetMm).toBe(1);
+      expect(bounds.innerX).toBe(1);
+      expect(bounds.innerY).toBe(1);
+      expect(bounds.innerWidth).toBe(48);
+      expect(bounds.innerHeight).toBe(48);
+      expect(bounds.innerRadius).toBe(24);
+    });
+
+    it('для прямоугольника 60x40 и вылета 2 мм сжимает до 56x36 со смещением (2, 2)', () => {
+      const bounds = getInnerArtBounds(60, 40, 2, 'rect', true);
+      expect(bounds.insetMm).toBe(2);
+      expect(bounds.innerX).toBe(2);
+      expect(bounds.innerY).toBe(2);
+      expect(bounds.innerWidth).toBe(56);
+      expect(bounds.innerHeight).toBe(36);
+    });
+
+    it('для скругленного прямоугольника 60x40 r=5 и вылета 2 мм уменьшает радиус скругления до 3 мм', () => {
+      const bounds = getInnerArtBounds(60, 40, 2, 'rounded', true, 5);
+      expect(bounds.insetMm).toBe(2);
+      expect(bounds.innerRadius).toBe(3);
+      expect(bounds.innerWidth).toBe(56);
+      expect(bounds.innerHeight).toBe(36);
+    });
+
+    it('ограничивает сжатие лимитом 40% от минимального размера, если вылет слишком велик', () => {
+      // Стикер 10 мм, вылет 5 мм -> лимит 40% = 4 мм, результирующий размер 2 мм (20% от исходного)
+      const bounds = getInnerArtBounds(10, 10, 5, 'circle', true);
+      expect(bounds.insetMm).toBe(4);
+      expect(bounds.innerWidth).toBe(2);
+      expect(bounds.innerHeight).toBe(2);
+      expect(bounds.innerRadius).toBe(1);
     });
   });
 });

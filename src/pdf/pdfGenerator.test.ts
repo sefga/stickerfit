@@ -283,4 +283,45 @@ describe('PDF Regression Test (§30 ТЗ)', () => {
     // Векторный контур записан в content stream ДО растрового объекта Do (underlay z-order)
     expect(firstContourIndex).toBeLessThan(firstDoIndex);
   });
+
+  it('Корректно генерирует PDF с центрированным ободом (bleedCenterCut: true)', async () => {
+    const dummyImageBytes = new Uint8Array([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+      0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+      0x42, 0x60, 0x82,
+    ]);
+
+    const layout = calculateLayout({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 10, bottom: 10, left: 10, right: 10 },
+      gapX: 4,
+      gapY: 4,
+      allowRotation: false,
+      bleedMm: 2,
+    });
+
+    const pdfBytes = await generateStickerSheetPdf({
+      pageWidthMm: A4_WIDTH_MM,
+      pageHeightMm: A4_HEIGHT_MM,
+      layout,
+      imageBytes: dummyImageBytes,
+      imageMimeType: 'image/png',
+      stickerShape: 'circle',
+      bleedMm: 2,
+      bleedColor: '#3B82F6',
+      bleedCenterCut: true,
+      includeCutContour: true,
+    });
+
+    expect(pdfBytes).toBeDefined();
+    expect(pdfBytes.length).toBeGreaterThan(0);
+
+    const loadedPdf = await PDFDocument.load(pdfBytes);
+    expect(loadedPdf.getPageCount()).toBe(1);
+  });
 });

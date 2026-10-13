@@ -88,4 +88,40 @@ describe('previewRenderer', () => {
     expect(svg).toContain('fill="#10B981"');
     expect(svg).toContain('stroke="none"');
   });
+
+  it('при bleedCenterCut = true сжимает изображение внутрь и сохраняет контур реза по номиналу', () => {
+    const layout = calculateLayout({
+      pageWidthMm: 210,
+      pageHeightMm: 297,
+      stickerWidthMm: 50,
+      stickerHeightMm: 50,
+      margins: { top: 5, bottom: 5, left: 5, right: 5 },
+      gapX: 2,
+      gapY: 2,
+      allowRotation: false,
+      bleedMm: 1,
+    });
+
+    const svg = renderPreviewSvg({
+      pageWidthMm: 210,
+      pageHeightMm: 297,
+      margins: { top: 5, bottom: 5, left: 5, right: 5 },
+      layout,
+      imageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      cutMarksConfig: DEFAULT_CUT_MARKS_CONFIG,
+      bleedMm: 1,
+      bleedColor: '#3B82F6',
+      bleedCenterCut: true,
+      stickerShape: 'circle',
+    });
+
+    // Изображение сжато до 48x48 и смещено на (1, 1)
+    expect(svg).toContain('x="1" y="1" width="48" height="48"');
+    // Маска сжатого изображения r=24
+    expect(svg).toContain('r="24"');
+    // Контур реза плоттера строго r=25 (номинал 50 мм)
+    expect(svg).toContain('r="25" fill="none" stroke="#ef4444"');
+    // Фоновая заливка цвета #3B82F6 присутствует в определении стикера
+    expect(svg).toContain('fill="#3B82F6"');
+  });
 });

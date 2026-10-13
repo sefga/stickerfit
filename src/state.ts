@@ -42,6 +42,7 @@ export interface AppSettings {
   bleedMm: number;
   bleedColor: string;
   bleedEdgeCleanup: boolean;
+  bleedCenterCut: boolean;
   pngDpi: PngDpi;
 }
 
@@ -86,6 +87,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   bleedMm: 0,
   bleedColor: '#FFFFFF',
   bleedEdgeCleanup: true,
+  bleedCenterCut: false,
   pngDpi: 300,
 };
 
@@ -105,6 +107,8 @@ function loadSettings(): AppSettings {
         bleedColor,
         bleedEdgeCleanup: typeof parsed.bleedEdgeCleanup === 'boolean'
           ? parsed.bleedEdgeCleanup : DEFAULT_SETTINGS.bleedEdgeCleanup,
+        bleedCenterCut: typeof parsed.bleedCenterCut === 'boolean'
+          ? parsed.bleedCenterCut : DEFAULT_SETTINGS.bleedCenterCut,
         margins: { ...DEFAULT_SETTINGS.margins, ...(parsed.margins || {}) },
         cutMarks: { ...DEFAULT_CUT_MARKS_CONFIG, ...(parsed.cutMarks || {}) },
       };
@@ -163,6 +167,7 @@ export function saveSettings(settings: AppSettings): void {
       bleedMm: settings.bleedMm,
       bleedColor: normalizeHexColor(settings.bleedColor || '#FFFFFF'),
       bleedEdgeCleanup: settings.bleedEdgeCleanup,
+      bleedCenterCut: Boolean(settings.bleedCenterCut),
       pngDpi: settings.pngDpi || 300,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));

@@ -6,7 +6,7 @@ import { LayoutResult } from '../layout/layoutEngine';
 import { CutMarksConfig, DEFAULT_CUT_MARKS_CONFIG, drawCutMarksOnPdf, generateCutMarks } from './cutMarks';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
-import { getBleedOuterSvgPath, getStickerContourSvgPath, normalizeHexColor } from '../layout/bleedGeometry';
+import { getBleedOuterSvgPath, getStickerContourSvgPath, normalizeHexColor, getInnerArtBounds } from '../layout/bleedGeometry';
 
 export interface PdfExportOptions {
   pageWidthMm: number;
@@ -18,6 +18,7 @@ export interface PdfExportOptions {
   cutMarks?: CutMarksConfig;
   bleedMm?: number; // 0, 1, 2, 3 мм
   bleedColor?: string;
+  bleedCenterCut?: boolean;
   stickerShape?: StickerShape;
   cornerRadiusMm?: number;
   registrationMarks?: boolean;
@@ -38,7 +39,8 @@ async function createMaskedStickerPng(
   stickerHeightMm: number,
   bleedMm: number = 0,
   bleedColor: string = '#FFFFFF',
-  edgeFillPath?: string
+  edgeFillPath?: string,
+  bleedCenterCut: boolean = false
 ): Promise<{ bytes: Uint8Array; mimeType: string }> {
   if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
     return { bytes: imageBytes, mimeType: imageMimeType || 'image/png' };
@@ -109,33 +111,45 @@ async function createMaskedStickerPng(
           }
         }
 
+        const artBounds = getInnerArtBounds(
+          stickerWidthMm,
+          stickerHeightMm,
+          bleedMm,
+          shape,
+          bleedCenterCut,
+          cornerRadiusMm
+        );
+
+        const artPxX = offsetX + Math.round(artBounds.innerX * scaleX);
+        const artPxY = offsetY + Math.round(artBounds.innerY * scaleY);
+        const artW = Math.round(artBounds.innerWidth * scaleX);
+        const artH = Math.round(artBounds.innerHeight * scaleY);
+
         // 2. Отрисовка изображения наклейки по центру со скруглением/маскированием 1:1
         ctx.save();
         ctx.beginPath();
         if (shape === 'circle') {
-          const radius = Math.min(naturalW, naturalH) / 2;
-          ctx.arc(offsetX + naturalW / 2, offsetY + naturalH / 2, radius, 0, Math.PI * 2);
+          const radius = Math.min(artW, artH) / 2;
+          ctx.arc(artPxX + artW / 2, artPxY + artH / 2, radius, 0, Math.PI * 2);
           ctx.clip();
         } else if (shape === 'rounded') {
-          const maxR = Math.min(stickerWidthMm / 2, stickerHeightMm / 2);
-          const clampedR = Math.min(Math.max(0, cornerRadiusMm), maxR);
-          const rPx = Math.min(naturalW / 2, naturalH / 2, clampedR * scaleX);
+          const rPx = Math.min(artW / 2, artH / 2, artBounds.innerRadius * scaleX);
           if (typeof ctx.roundRect === 'function') {
-            ctx.roundRect(offsetX, offsetY, naturalW, naturalH, rPx);
+            ctx.roundRect(artPxX, artPxY, artW, artH, rPx);
           } else {
-            ctx.rect(offsetX, offsetY, naturalW, naturalH);
+            ctx.rect(artPxX, artPxY, artW, artH);
           }
           ctx.clip();
-        } else if (bleedMm > 0) {
-          ctx.rect(offsetX, offsetY, naturalW, naturalH);
+        } else if (bleedMm > 0 || bleedCenterCut) {
+          ctx.rect(artPxX, artPxY, artW, artH);
           ctx.clip();
         }
 
-        ctx.drawImage(img, offsetX, offsetY, naturalW, naturalH);
+        ctx.drawImage(img, artPxX, artPxY, artW, artH);
         ctx.restore();
 
-        // 3. Краевой фон (edgeFillPath), если включена очистка каймы
-        if (bleedMm > 0 && edgeFillPath && typeof Path2D !== 'undefined') {
+        // 3. Краевой фон (edgeFillPath), если включена очистка каймы (только при выключенном bleedCenterCut)
+        if (bleedMm > 0 && edgeFillPath && !bleedCenterCut && typeof Path2D !== 'undefined') {
           ctx.save();
           ctx.translate(offsetX, offsetY);
           ctx.scale(scaleX, scaleY);
@@ -191,6 +205,7 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
     cutMarks = DEFAULT_CUT_MARKS_CONFIG,
     bleedMm = 0,
     bleedColor = '#FFFFFF',
+    bleedCenterCut = false,
     stickerShape = 'rect',
     cornerRadiusMm = 3,
     registrationMarks = false,
@@ -222,7 +237,8 @@ export async function generateStickerSheetPdf(options: PdfExportOptions): Promis
         firstPos.heightMm,
         bleedMm,
         bleedColor,
-        edgeFillPath
+        edgeFillPath,
+        bleedCenterCut
       );
       finalBytes = masked.bytes;
       finalMime = masked.mimeType;

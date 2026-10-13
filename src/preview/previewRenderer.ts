@@ -4,7 +4,7 @@ import { Margins } from '../layout/layoutEngine';
 import { SizingMode } from '../image/cropEngine';
 import { StickerShape } from '../state';
 import { getRegistrationMarksPositions } from '../export/svgCutGenerator';
-import { getBleedDifferenceSvgPath, getBleedOuterSvgPath, normalizeHexColor } from '../layout/bleedGeometry';
+import { getBleedDifferenceSvgPath, getBleedOuterSvgPath, normalizeHexColor, getInnerArtBounds } from '../layout/bleedGeometry';
 import { t } from '../i18n';
 
 export interface PreviewOptions {
@@ -18,6 +18,7 @@ export interface PreviewOptions {
   cutMarksConfig: CutMarksConfig;
   bleedMm?: number;
   bleedColor?: string;
+  bleedCenterCut?: boolean;
   stickerShape?: StickerShape;
   cornerRadiusMm?: number;
   registrationMarks?: boolean;
@@ -39,6 +40,7 @@ export function renderPreviewSvg(options: PreviewOptions): string {
     cutMarksConfig,
     bleedMm = 0,
     bleedColor = '#FFFFFF',
+    bleedCenterCut = false,
     stickerShape = 'rect',
     cornerRadiusMm = 3,
     registrationMarks = false,
@@ -63,41 +65,54 @@ export function renderPreviewSvg(options: PreviewOptions): string {
 
   const clampedRadius = Math.max(0, Math.min(cornerRadiusMm, Math.min(stickerW, stickerH) / 2));
 
-  // Определение клип-пути для формы стикера
+  const artBounds = getInnerArtBounds(
+    stickerW,
+    stickerH,
+    bleedMm,
+    stickerShape,
+    Boolean(bleedCenterCut),
+    clampedRadius
+  );
+
+  // Определение клип-пути для формы стикера (с учетом возможного сжатия при bleedCenterCut)
   let clipGeometry = '';
   let strokeContour = '';
 
   if (stickerShape === 'circle') {
     const d = Math.min(stickerW, stickerH);
     const r = d / 2;
-    clipGeometry = `<circle cx="${stickerW / 2}" cy="${stickerH / 2}" r="${r}" />`;
+    clipGeometry = `<circle cx="${stickerW / 2}" cy="${stickerH / 2}" r="${artBounds.innerRadius}" />`;
     strokeContour = `<circle cx="${stickerW / 2}" cy="${stickerH / 2}" r="${r}" fill="none" stroke="#ef4444" stroke-width="0.2" stroke-dasharray="1.2,0.8" />`;
   } else if (stickerShape === 'rounded') {
-    clipGeometry = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" rx="${clampedRadius}" ry="${clampedRadius}" />`;
+    clipGeometry = `<rect x="${artBounds.innerX}" y="${artBounds.innerY}" width="${artBounds.innerWidth}" height="${artBounds.innerHeight}" rx="${artBounds.innerRadius}" ry="${artBounds.innerRadius}" />`;
     strokeContour = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" rx="${clampedRadius}" ry="${clampedRadius}" fill="none" stroke="#ef4444" stroke-width="0.2" stroke-dasharray="1.2,0.8" />`;
   } else {
-    clipGeometry = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" />`;
+    clipGeometry = `<rect x="${artBounds.innerX}" y="${artBounds.innerY}" width="${artBounds.innerWidth}" height="${artBounds.innerHeight}" />`;
     strokeContour = `<rect x="0" y="0" width="${stickerW}" height="${stickerH}" fill="none" stroke="#ef4444" stroke-width="0.2" stroke-dasharray="1.2,0.8" />`;
   }
 
   // Определение стилей, фильтров и переиспользуемых элементов
   let imageDef = '';
   if (imageUrl) {
-    const edgeFill = bleedMm > 0 && edgeFillPath
-      ? `<path d="${edgeFillPath}" fill="${normalizeHexColor(bleedColor)}" clip-path="url(#stickerBleedClip)" />`
-      : '';
     const outerPath = getBleedOuterSvgPath({
       xMm: 0, yMm: 0, widthMm: stickerW, heightMm: stickerH,
       bleedMm, shape: stickerShape, cornerRadiusMm: clampedRadius,
     });
+    const backgroundFill = bleedMm > 0 && bleedCenterCut
+      ? `<path d="${outerPath}" fill="${normalizeHexColor(bleedColor)}" />`
+      : '';
+    const edgeFill = bleedMm > 0 && edgeFillPath && !bleedCenterCut
+      ? `<path d="${edgeFillPath}" fill="${normalizeHexColor(bleedColor)}" clip-path="url(#stickerBleedClip)" />`
+      : '';
     imageDef = `
       <clipPath id="stickerShapeClip">
         ${clipGeometry}
       </clipPath>
       <clipPath id="stickerBleedClip"><path d="${outerPath}" /></clipPath>
       <g id="stickerArtSource">
+        ${backgroundFill}
         <g clip-path="url(#stickerShapeClip)">
-          <image href="${imageUrl}" x="0" y="0" width="${stickerW}" height="${stickerH}" preserveAspectRatio="${par}" />
+          <image href="${imageUrl}" x="${artBounds.innerX}" y="${artBounds.innerY}" width="${artBounds.innerWidth}" height="${artBounds.innerHeight}" preserveAspectRatio="${par}" />
         </g>
         ${edgeFill}
         ${strokeContour}
@@ -153,8 +168,8 @@ export function renderPreviewSvg(options: PreviewOptions): string {
   visiblePositions.forEach((pos, idx) => {
     const { xMm, yMm, widthMm, heightMm } = pos;
 
-    // Внешнее кольцо сохраняет прозрачные участки и поля Fit внутри наклейки.
-    if (bleedMm > 0) {
+    // Внешнее кольцо для классического режима (когда bleedCenterCut = false)
+    if (bleedMm > 0 && !bleedCenterCut) {
       const color = normalizeHexColor(bleedColor);
       const bleedPath = getBleedDifferenceSvgPath({
         xMm,

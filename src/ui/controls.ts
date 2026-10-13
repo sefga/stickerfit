@@ -740,6 +740,12 @@ export class UIController {
       await this.recalculateArtwork();
     });
 
+    const bleedCenterCut = document.getElementById('bleedCenterCut') as HTMLInputElement;
+    bleedCenterCut?.addEventListener('change', async () => {
+      store.update({ bleedCenterCut: bleedCenterCut.checked });
+      await this.recalculateArtwork();
+    });
+
     const bleedColorPicker = document.getElementById('bleedColorPicker') as HTMLInputElement;
     const bleedColorHex = document.getElementById('bleedColorHex') as HTMLInputElement;
     const btnBleedEyedropper = document.getElementById('btnBleedEyedropper') as HTMLButtonElement;
@@ -1143,6 +1149,7 @@ export class UIController {
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
       bleedColor: state.bleedColor,
+      bleedCenterCut: state.bleedCenterCut,
       stickerShape: state.stickerShape,
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
@@ -1240,6 +1247,7 @@ export class UIController {
         cutMarks: state.cutMarks,
         bleedMm: state.bleedMm,
         bleedColor: state.bleedColor,
+        bleedCenterCut: state.bleedCenterCut,
         dpi,
         stickerShape: state.stickerShape,
         cornerRadiusMm: state.cornerRadiusMm,
@@ -1312,6 +1320,7 @@ export class UIController {
       cutMarks: state.cutMarks,
       bleedMm: state.bleedMm,
       bleedColor: state.bleedColor,
+      bleedCenterCut: state.bleedCenterCut,
       stickerShape: state.stickerShape,
       cornerRadiusMm: state.cornerRadiusMm,
       registrationMarks: state.registrationMarks,
@@ -1399,6 +1408,7 @@ export class UIController {
         cutMarksConfig: state.cutMarks,
         bleedMm: state.bleedMm,
         bleedColor: state.bleedColor,
+        bleedCenterCut: state.bleedCenterCut,
         stickerShape: state.stickerShape,
         cornerRadiusMm: state.cornerRadiusMm,
         registrationMarks: state.registrationMarks,
@@ -1565,6 +1575,16 @@ export class UIController {
       bleedEdgeCleanupGroup.style.display = state.bleedMm > 0 ? 'block' : 'none';
     }
     setChecked('bleedEdgeCleanup', state.bleedEdgeCleanup);
+
+    const bleedCenterCutGroup = document.getElementById('bleedCenterCutGroup');
+    if (bleedCenterCutGroup) {
+      bleedCenterCutGroup.style.display = state.bleedMm > 0 ? 'block' : 'none';
+    }
+    setChecked('bleedCenterCut', state.bleedCenterCut);
+    const bleedCenterCutHint = document.getElementById('bleedCenterCutHint');
+    if (bleedCenterCutHint && state.bleedMm > 0) {
+      bleedCenterCutHint.textContent = t('hintBleedCenterCut', { bleed: state.bleedMm });
+    }
 
     const curBleedColor = normalizeHexColor(state.bleedColor || '#FFFFFF');
     const bleedColorPicker = document.getElementById('bleedColorPicker') as HTMLInputElement;

@@ -1,14 +1,27 @@
 {
   "active": false,
-  "taskScope": "Расположить векторный контур реза (CutContour) под растровым изображением стикера в PDF для скрытия от печати с сохранением вектора для плоттера",
+  "taskScope": "008: Рез по середине защитного обода (центрированный обод / сжатие картинки внутрь для компенсации точности позиционирования плоттера)",
   "phase": "DONE",
   "allowedFiles": [
+    "src/state.ts",
+    "src/layout/bleedGeometry.ts",
+    "src/layout/bleedGeometry.test.ts",
+    "src/preview/previewRenderer.ts",
+    "src/preview/previewRenderer.test.ts",
     "src/pdf/pdfGenerator.ts",
     "src/pdf/pdfGenerator.test.ts",
-    "specs/007-pdf-cut-contour-underlay/spec.md",
-    "specs/007-pdf-cut-contour-underlay/plan.md",
-    "specs/007-pdf-cut-contour-underlay/tasks.md",
-    "specs/007-pdf-cut-contour-underlay/checklists/requirements.md",
+    "src/export/pngGenerator.ts",
+    "src/export/pngGenerator.test.ts",
+    "src/export/svgCutGenerator.test.ts",
+    "src/ui/controls.ts",
+    "src/urlParams.ts",
+    "index.html",
+    "src/i18n.ts",
+    "src/i18n.test.ts",
+    "specs/008-centered-bleed-cut/spec.md",
+    "specs/008-centered-bleed-cut/plan.md",
+    "specs/008-centered-bleed-cut/checklists/requirements.md",
+    "specs/008-centered-bleed-cut/tasks.md",
     ".specify/feature.json",
     ".specify/state.json",
     ".specify/IMPLEMENTATION_GATE.md"
@@ -18,9 +31,10 @@
     "npm run build"
   ],
   "verificationEvidence": {
-    "vitest": "19 test files passed (164 tests passed)",
-    "build": "tsc && vite build completed in 4.28s with 0 errors"
+    "vitest": "PASS: 19 test files, 174 tests passed (0 failures)",
+    "build": "PASS: tsc && vite build completed with exit code 0",
+    "scopeLock": "VERIFIED: 100% allowedFiles compliance, zero out-of-scope edits"
   },
-  "tasksCompleted": 3,
-  "tasksTotal": 3
+  "tasksCompleted": 10,
+  "tasksTotal": 10
 }

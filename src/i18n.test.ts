@@ -127,12 +127,16 @@ describe('i18n module', () => {
     setLanguage('ru');
     expect(t('lblBleedColor')).toBe('Цвет вылета');
     expect(t('lblBleedEyedropper')).toBe('Пипетка');
+    expect(t('lblBleedCenterCut')).toBe('Рез по центру обода');
+    expect(t('hintBleedCenterCut', { bleed: 1 })).toContain('1 мм');
     expect(t('warnBleedEffectiveGap', { effectiveGap: 4, gap: 2 })).toContain('4 мм');
     expect(t('bleedCapacityDiff', { count: 20 })).toContain('20 шт.');
 
     setLanguage('en');
     expect(t('lblBleedColor')).toBe('Bleed color');
     expect(t('lblBleedEyedropper')).toBe('Eyedropper');
+    expect(t('lblBleedCenterCut')).toBe('Cut through center of rim');
+    expect(t('hintBleedCenterCut', { bleed: 1 })).toContain('1 mm');
     expect(t('warnBleedEffectiveGap', { effectiveGap: 4, gap: 2 })).toContain('4 mm');
     expect(t('bleedCapacityDiff', { count: 20 })).toContain('20 pcs');
   });
